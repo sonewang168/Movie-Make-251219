@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>🎬 AI 影片生成器</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        :root {
+            --bg:#0a0a0f;
+            --card:rgba(20,20,30,0.9);
+            --glass:rgba(255,255,255,0.05);
+            --border:rgba(255,255,255,0.1);
+            --primary:#a855f7;
+            --secondary:#ec4899;
+            --accent:#06b6d4;
+            --text:#fff;
+            --text2:rgba(255,255,255,0.6);
+        }
+        body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        
+        /* ===== 開機動畫 - 「影」字科幻風 ===== */
+        .splash {
+            position:fixed; inset:0; z-index:9999;
+            background:linear-gradient(135deg,#0a0a0f 0%,#1a0a2e 50%,#0a1628 100%);
+            display:flex; flex-direction:column; justify-content:center; align-items:center;
+            transition:opacity 0.8s, visibility 0.8s;
+        }
+        .splash.hide { opacity:0; visibility:hidden; pointer-events:none; }
+        
+        .splash-container {
+            position:relative;
+            width:280px; height:280px;
+            perspective:1000px;
+        }
+        
+        /* 外圈旋轉光環 */
+        .ring-outer {
+            position:absolute; inset:-40px;
+            border:2px solid transparent;
+            border-top-color:var(--primary);
+            border-radius:50%;
+            animation:spinRing 3s linear infinite;
+        }
+        .ring-outer::before {
+            content:''; position:absolute; inset:-10px;
+            border:1px solid transparent;
+            border-right-color:var(--secondary);
+            border-radius:50%;
+            animation:spinRing 2s linear infinite reverse;
+        }
+        
+        /* 中圈脈衝 */
+        .ring-mid {
+            position:absolute; inset:20px;
+            border:1px solid var(--accent);
+            border-radius:50%;
+            animation:pulse 2s ease-in-out infinite;
+            box-shadow:0 0 30px rgba(6,182,212,0.3), inset 0 0 30px rgba(6,182,212,0.1);
+        }
+        
+        /* 「影」字 3D 旋轉 */
+        .char-box {
+            position:absolute; inset:0;
+            display:flex; justify-content:center; align-items:center;
+            transform-style:preserve-3d;
+            animation:rotate3D 4s ease-in-out infinite;
+        }
+        
+        .char {
+            font-size:120px;
+            font-weight:900;
+            background:linear-gradient(135deg,#a855f7 0%,#ec4899 50%,#06b6d4 100%);
+            -webkit-background-clip:text;
+            -webkit-text-fill-color:transparent;
+            background-clip:text;
+            filter:drop-shadow(0 0 20px rgba(168,85,247,0.5)) drop-shadow(0 0 40px rgba(236,72,153,0.3));
+            animation:glowPulse 2s ease-in-out infinite;
+        }
+        
+        /* 掃描線效果 */
+        .scan-line {
+            position:absolute;
+            width:100%;
+            height:3px;
+            background:linear-gradient(90deg,transparent,var(--accent),transparent);
+            animation:scanMove 2s linear infinite;
+            box-shadow:0 0 20px var(--accent);
+        }
+        
+        /* 粒子效果 */
+        .particles {
+            position:absolute; inset:-50px;
+            pointer-events:none;
+        }
+        .particle {
+            position:absolute;
+            width:4px; height:4px;
+            background:var(--primary);
+            border-radius:50%;
+            animation:particleFloat 3s ease-in-out infinite;
+        }
+        .particle:nth-child(2) { left:20%; animation-delay:0.5s; background:var(--secondary); }
+        .particle:nth-child(3) { left:40%; animation-delay:1s; background:var(--accent); }
+        .particle:nth-child(4) { left:60%; animation-delay:1.5s; background:var(--primary); }
+        .particle:nth-child(5) { left:80%; animation-delay:2s; background:var(--secondary); }
+        .particle:nth-child(6) { left:90%; animation-delay:2.5s; background:var(--accent); }
+        
+        /* 科技格線背景 */
+        .grid-bg {
+            position:absolute; inset:0;
+            background-image:
+                linear-gradient(rgba(168,85,247,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(168,85,247,0.03) 1px, transparent 1px);
+            background-size:50px 50px;
+            animation:gridMove 20s linear infinite;
+        }
+        
+        .splash-title {
+            margin-top:40px;
+            font-size:24px;
+            font-weight:700;
+            background:linear-gradient(90deg,var(--primary),var(--secondary),var(--accent));
+            -webkit-background-clip:text;
+            -webkit-text-fill-color:transparent;
+            background-clip:text;
+            letter-spacing:8px;
+            animation:titleGlow 2s ease-in-out infinite;
+        }
+        
+        .splash-sub {
+            margin-top:12px;
+            font-size:12px;
+            color:var(--text2);
+            letter-spacing:4px;
+        }
+        
+        .loading-bar {
+            margin-top:30px;
+            width:200px; height:3px;
+            background:rgba(255,255,255,0.1);
+            border-radius:2px;
+            overflow:hidden;
+        }
+        .loading-bar::after {
+            content:'';
+            display:block;
+            width:40%;
+            height:100%;
+            background:linear-gradient(90deg,var(--primary),var(--secondary),var(--accent));
+            animation:loadingMove 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes spinRing { to { transform:rotate(360deg); } }
+        @keyframes pulse { 0%,100% { transform:scale(1); opacity:0.5; } 50% { transform:scale(1.1); opacity:1; } }
+        @keyframes rotate3D {
+            0% { transform:rotateY(0deg) rotateX(0deg); }
+            25% { transform:rotateY(15deg) rotateX(5deg); }
+            50% { transform:rotateY(0deg) rotateX(0deg); }
+            75% { transform:rotateY(-15deg) rotateX(-5deg); }
+            100% { transform:rotateY(0deg) rotateX(0deg); }
+        }
+        @keyframes glowPulse { 0%,100% { filter:drop-shadow(0 0 20px rgba(168,85,247,0.5)) drop-shadow(0 0 40px rgba(236,72,153,0.3)); } 50% { filter:drop-shadow(0 0 40px rgba(168,85,247,0.8)) drop-shadow(0 0 60px rgba(236,72,153,0.5)); } }
+        @keyframes scanMove { 0% { top:-10%; opacity:0; } 50% { opacity:1; } 100% { top:110%; opacity:0; } }
+        @keyframes particleFloat { 0%,100% { transform:translateY(0) scale(1); opacity:0.5; } 50% { transform:translateY(-100px) scale(1.5); opacity:1; } }
+        @keyframes gridMove { to { background-position:50px 50px; } }
+        @keyframes titleGlow { 0%,100% { opacity:1; } 50% { opacity:0.8; } }
+        @keyframes loadingMove { 0% { transform:translateX(-100%); } 100% { transform:translateX(350%); } }
+        
+        /* ===== 主介面 ===== */
+        .app { padding:20px 16px 100px; max-width:600px; margin:0 auto; }
+        
+        .header {
+            text-align:center;
+            padding:20px 0;
+        }
+        .header h1 {
+            font-size:28px;
+            background:linear-gradient(135deg,var(--primary),var(--secondary));
+            -webkit-background-clip:text;
+            -webkit-text-fill-color:transparent;
+            background-clip:text;
+        }
+        .header p { color:var(--text2); font-size:14px; margin-top:8px; }
+        
+        /* 卡片 */
+        .card {
+            background:var(--card);
+            border:1px solid var(--border);
+            border-radius:20px;
+            padding:20px;
+            margin-bottom:16px;
+            backdrop-filter:blur(20px);
+        }
+        .card-title {
+            font-size:14px;
+            color:var(--text2);
+            margin-bottom:16px;
+            display:flex;
+            align-items:center;
+            gap:8px;
+        }
+        .card-title span { font-size:18px; }
+        
+        /* 輸入模式切換 */
+        .mode-tabs {
+            display:flex;
+            gap:10px;
+            margin-bottom:20px;
+        }
+        .mode-tab {
+            flex:1;
+            padding:14px;
+            background:var(--glass);
+            border:1px solid var(--border);
+            border-radius:12px;
+            color:var(--text2);
+            font-size:14px;
+            cursor:pointer;
+            transition:all 0.3s;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:8px;
+        }
+        .mode-tab:hover { background:rgba(255,255,255,0.1); }
+        .mode-tab.active {
+            background:linear-gradient(135deg,var(--primary),var(--secondary));
+            color:#fff;
+            border-color:transparent;
+        }
+        
+        /* 文字輸入區 */
+        .input-section { display:block; }
+        .input-section.hide { display:none; }
+        
+        textarea {
+            width:100%;
+            min-height:120px;
+            padding:16px;
+            background:rgba(0,0,0,0.3);
+            border:1px solid var(--border);
+            border-radius:12px;
+            color:var(--text);
+            font-size:15px;
+            resize:vertical;
+            font-family:inherit;
+        }
+        textarea:focus { outline:none; border-color:var(--primary); }
+        textarea::placeholder { color:var(--text2); }
+        
+        /* 圖片上傳區 */
+        .upload-zone {
+            border:2px dashed var(--border);
+            border-radius:16px;
+            padding:40px 20px;
+            text-align:center;
+            cursor:pointer;
+            transition:all 0.3s;
+        }
+        .upload-zone:hover { border-color:var(--primary); background:rgba(168,85,247,0.05); }
+        .upload-zone.has-image { border-style:solid; border-color:var(--accent); }
+        .upload-icon { font-size:48px; margin-bottom:12px; }
+        .upload-text { color:var(--text2); font-size:14px; }
+        .upload-preview {
+            max-width:100%;
+            max-height:200px;
+            border-radius:12px;
+            display:none;
+        }
+        .upload-zone.has-image .upload-preview { display:block; margin:0 auto; }
+        .upload-zone.has-image .upload-icon,
+        .upload-zone.has-image .upload-text { display:none; }
+        
+        input[type="file"] { display:none; }
+        
+        /* 模型選擇 */
+        .model-grid {
+            display:grid;
+            grid-template-columns:repeat(2,1fr);
+            gap:10px;
+        }
+        .model-option {
+            padding:14px 12px;
+            background:var(--glass);
+            border:1px solid var(--border);
+            border-radius:12px;
+            cursor:pointer;
+            transition:all 0.3s;
+            text-align:center;
+        }
+        .model-option:hover { background:rgba(255,255,255,0.1); }
+        .model-option.active {
+            border-color:var(--primary);
+            background:rgba(168,85,247,0.15);
+        }
+        .model-icon { font-size:24px; margin-bottom:6px; }
+        .model-name { font-size:13px; font-weight:600; }
+        .model-desc { font-size:10px; color:var(--text2); margin-top:4px; }
+        
+        /* 設定選項 */
+        .option-row {
+            display:flex;
+            gap:12px;
+            margin-bottom:12px;
+        }
+        .option-group {
+            flex:1;
+        }
+        .option-label {
+            font-size:12px;
+            color:var(--text2);
+            margin-bottom:8px;
+        }
+        .option-btns {
+            display:flex;
+            gap:6px;
+        }
+        .option-btn {
+            flex:1;
+            padding:10px 8px;
+            background:var(--glass);
+            border:1px solid var(--border);
+            border-radius:8px;
+            color:var(--text2);
+            font-size:12px;
+            cursor:pointer;
+            transition:all 0.3s;
+        }
+        .option-btn:hover { background:rgba(255,255,255,0.1); }
+        .option-btn.active {
+            background:var(--primary);
+            color:#fff;
+            border-color:transparent;
+        }
+        
+        /* 生成按鈕 */
+        .gen-btn {
+            width:100%;
+            padding:18px;
+            background:linear-gradient(135deg,var(--primary),var(--secondary));
+            border:none;
+            border-radius:16px;
+            color:#fff;
+            font-size:18px;
+            font-weight:700;
+            cursor:pointer;
+            transition:all 0.3s;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:10px;
+        }
+        .gen-btn:hover { transform:scale(1.02); box-shadow:0 10px 30px rgba(168,85,247,0.4); }
+        .gen-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
+        
+        /* 結果區 */
+        .result-card {
+            display:none;
+        }
+        .result-card.show { display:block; }
+        
+        .video-wrap {
+            position:relative;
+            border-radius:12px;
+            overflow:hidden;
+            background:#000;
+        }
+        .video-wrap video {
+            width:100%;
+            display:block;
+        }
+        
+        .result-info {
+            padding:16px 0;
+            font-size:13px;
+            color:var(--text2);
+        }
+        .result-info-row {
+            display:flex;
+            justify-content:space-between;
+            padding:6px 0;
+            border-bottom:1px solid var(--border);
+        }
+        
+        .result-actions {
+            display:flex;
+            gap:10px;
+            margin-top:16px;
+        }
+        .action-btn {
+            flex:1;
+            padding:14px;
+            border:none;
+            border-radius:12px;
+            font-size:14px;
+            font-weight:600;
+            cursor:pointer;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:6px;
+            transition:all 0.3s;
+        }
+        .action-btn:hover { transform:scale(1.02); }
+        .action-btn.download { background:linear-gradient(135deg,#10b981,#059669); color:#fff; }
+        .action-btn.share { background:linear-gradient(135deg,#3b82f6,#1d4ed8); color:#fff; }
+        .action-btn.line { background:#06c755; color:#fff; }
+        
+        /* 狀態提示 */
+        .status {
+            padding:16px;
+            border-radius:12px;
+            margin-top:16px;
+            font-size:14px;
+            display:none;
+        }
+        .status.show { display:block; }
+        .status.info { background:rgba(59,130,246,0.2); color:#60a5fa; }
+        .status.ok { background:rgba(16,185,129,0.2); color:#34d399; }
+        .status.err { background:rgba(239,68,68,0.2); color:#f87171; }
+        
+        /* 進度條 */
+        .progress-wrap {
+            margin-top:16px;
+            display:none;
+        }
+        .progress-wrap.show { display:block; }
+        .progress-bar {
+            height:8px;
+            background:rgba(255,255,255,0.1);
+            border-radius:4px;
+            overflow:hidden;
+        }
+        .progress-fill {
+            height:100%;
+            background:linear-gradient(90deg,var(--primary),var(--secondary));
+            width:0%;
+            transition:width 0.3s;
+        }
+        .progress-text {
+            text-align:center;
+            font-size:12px;
+            color:var(--text2);
+            margin-top:8px;
+        }
+        
+        /* 底部導航 */
+        .nav {
+            position:fixed;
+            bottom:0;
+            left:0;
+            right:0;
+            background:rgba(10,10,15,0.95);
+            backdrop-filter:blur(20px);
+            border-top:1px solid var(--border);
+            padding:10px 0;
+            padding-bottom:max(10px, env(safe-area-inset-bottom));
+        }
+        .nav-inner {
+            display:flex;
+            justify-content:center;
+            gap:40px;
+            max-width:400px;
+            margin:0 auto;
+        }
+        .nav-btn {
+            background:none;
+            border:none;
+            color:var(--text2);
+            font-size:12px;
+            cursor:pointer;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            gap:4px;
+            transition:all 0.3s;
+        }
+        .nav-btn .icon { font-size:24px; }
+        .nav-btn.active { color:var(--primary); }
+        
+        /* 設定面板 */
+        .settings {
+            display:none;
+            position:fixed;
+            inset:0;
+            background:var(--bg);
+            z-index:100;
+            overflow-y:auto;
+            padding:20px 16px 100px;
+        }
+        .settings.show { display:block; }
+        .settings-header {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:20px;
+        }
+        .settings-title { font-size:20px; font-weight:700; }
+        .settings-close {
+            width:36px; height:36px;
+            background:var(--glass);
+            border:1px solid var(--border);
+            border-radius:50%;
+            color:var(--text);
+            font-size:18px;
+            cursor:pointer;
+        }
+        
+        .setting-group {
+            background:var(--card);
+            border:1px solid var(--border);
+            border-radius:16px;
+            padding:16px;
+            margin-bottom:12px;
+        }
+        .setting-label {
+            font-size:12px;
+            color:var(--text2);
+            margin-bottom:8px;
+        }
+        .setting-input {
+            width:100%;
+            padding:12px;
+            background:rgba(0,0,0,0.3);
+            border:1px solid var(--border);
+            border-radius:10px;
+            color:var(--text);
+            font-size:14px;
+        }
+        .setting-input:focus { outline:none; border-color:var(--primary); }
+        
+        .save-btn {
+            width:100%;
+            padding:16px;
+            background:linear-gradient(135deg,var(--primary),var(--secondary));
+            border:none;
+            border-radius:12px;
+            color:#fff;
+            font-size:16px;
+            font-weight:600;
+            cursor:pointer;
+            margin-top:20px;
+        }
+        
+        /* Loading */
+        .loading {
+            position:fixed;
+            inset:0;
+            background:rgba(0,0,0,0.8);
+            display:none;
+            justify-content:center;
+            align-items:center;
+            z-index:200;
+            flex-direction:column;
+            gap:20px;
+        }
+        .loading.show { display:flex; }
+        .spinner {
+            width:50px; height:50px;
+            border:3px solid var(--border);
+            border-top-color:var(--primary);
+            border-radius:50%;
+            animation:spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .loading-text { color:var(--text); font-size:14px; text-align:center; }
+        
+        /* Toast */
+        #toast {
+            position:fixed;
+            bottom:120px;
+            left:50%;
+            transform:translateX(-50%) translateY(100px);
+            background:rgba(0,0,0,0.9);
+            color:#fff;
+            padding:12px 24px;
+            border-radius:30px;
+            font-size:14px;
+            opacity:0;
+            transition:all 0.3s;
+            z-index:300;
+            white-space:nowrap;
+        }
+        #toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+    </style>
+</head>
+<body>
+    <!-- 開機動畫 -->
+    <div class="splash" id="splash">
+        <div class="grid-bg"></div>
+        <div class="splash-container">
+            <div class="ring-outer"></div>
+            <div class="ring-mid"></div>
+            <div class="char-box">
+                <div class="char">影</div>
+            </div>
+            <div class="scan-line"></div>
+            <div class="particles">
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+            </div>
+        </div>
+        <div class="splash-title">AI VIDEO</div>
+        <div class="splash-sub">GENERATOR</div>
+        <div class="loading-bar"></div>
+    </div>
+
+    <!-- 主程式 -->
+    <div class="app">
+        <div class="header">
+            <h1>🎬 AI 影片生成器</h1>
+            <p>文字/圖片 → 精彩影片</p>
+        </div>
+
+        <!-- 輸入模式 -->
+        <div class="card">
+            <div class="mode-tabs">
+                <button class="mode-tab active" data-mode="text" onclick="setMode('text')">
+                    <span>📝</span> 文字生影片
+                </button>
+                <button class="mode-tab" data-mode="image" onclick="setMode('image')">
+                    <span>🖼️</span> 圖片生影片
+                </button>
+            </div>
+
+            <!-- 文字輸入 -->
+            <div class="input-section" id="textSection">
+                <textarea id="promptInput" placeholder="描述你想要的影片內容...&#10;&#10;例如：&#10;• 一隻貓咪在草地上奔跑&#10;• 日落時分的海灘浪花&#10;• 未來城市的霓虹燈夜景"></textarea>
+            </div>
+
+            <!-- 圖片上傳 -->
+            <div class="input-section hide" id="imageSection">
+                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('imageInput').click()">
+                    <div class="upload-icon">📷</div>
+                    <div class="upload-text">點擊上傳圖片<br><small>支援 JPG、PNG</small></div>
+                    <img class="upload-preview" id="imagePreview">
+                </div>
+                <input type="file" id="imageInput" accept="image/*" onchange="handleImageUpload(event)">
+                <textarea id="imagePrompt" placeholder="描述圖片的動態效果（選填）&#10;例如：讓人物微笑、讓水流動..." style="margin-top:12px;min-height:80px;"></textarea>
+            </div>
+        </div>
+
+        <!-- 模型選擇 -->
+        <div class="card">
+            <div class="card-title"><span>🤖</span> 選擇 AI 模型</div>
+            <div class="model-grid">
+                <div class="model-option active" data-model="kling" onclick="setModel('kling')">
+                    <div class="model-icon">🎬</div>
+                    <div class="model-name">Kling 2.5</div>
+                    <div class="model-desc">高品質電影感</div>
+                </div>
+                <div class="model-option" data-model="hailuo" onclick="setModel('hailuo')">
+                    <div class="model-icon">🌊</div>
+                    <div class="model-name">Hailuo</div>
+                    <div class="model-desc">MiniMax 穩定</div>
+                </div>
+                <div class="model-option" data-model="wan" onclick="setModel('wan')">
+                    <div class="model-icon">🆓</div>
+                    <div class="model-name">Wan Video</div>
+                    <div class="model-desc">開源免費快速</div>
+                </div>
+                <div class="model-option" data-model="svd" onclick="setModel('svd')">
+                    <div class="model-icon">🎞️</div>
+                    <div class="model-name">Stable Video</div>
+                    <div class="model-desc">圖片動畫化</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 影片設定 -->
+        <div class="card">
+            <div class="card-title"><span>⚙️</span> 影片設定</div>
+            <div class="option-row">
+                <div class="option-group">
+                    <div class="option-label">⏱️ 影片長度</div>
+                    <div class="option-btns">
+                        <button class="option-btn active" data-duration="5" onclick="setDuration(5)">5 秒</button>
+                        <button class="option-btn" data-duration="10" onclick="setDuration(10)">10 秒</button>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <div class="option-label">📐 畫面比例</div>
+                    <div class="option-btns">
+                        <button class="option-btn active" data-ratio="16:9" onclick="setRatio('16:9')">16:9</button>
+                        <button class="option-btn" data-ratio="9:16" onclick="setRatio('9:16')">9:16</button>
+                        <button class="option-btn" data-ratio="1:1" onclick="setRatio('1:1')">1:1</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 生成按鈕 -->
+        <button class="gen-btn" id="genBtn" onclick="generateVideo()">
+            <span>🎬</span> 生成影片
+        </button>
+
+        <!-- 進度顯示 -->
+        <div class="progress-wrap" id="progressWrap">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">準備中...</div>
+        </div>
+
+        <!-- 狀態提示 -->
+        <div class="status" id="statusBox"></div>
+
+        <!-- 結果區 -->
+        <div class="card result-card" id="resultCard">
+            <div class="card-title"><span>✅</span> 影片生成完成</div>
+            <div class="video-wrap">
+                <video id="resultVideo" controls playsinline></video>
+            </div>
+            <div class="result-info">
+                <div class="result-info-row">
+                    <span>模型</span>
+                    <span id="resultModel">--</span>
+                </div>
+                <div class="result-info-row">
+                    <span>長度</span>
+                    <span id="resultDuration">--</span>
+                </div>
+                <div class="result-info-row">
+                    <span>生成時間</span>
+                    <span id="resultTime">--</span>
+                </div>
+            </div>
+            <div class="result-actions">
+                <button class="action-btn download" onclick="downloadVideo()">
+                    <span>📥</span> 下載
+                </button>
+                <button class="action-btn share" onclick="shareVideo()">
+                    <span>📤</span> 分享
+                </button>
+                <button class="action-btn line" onclick="pushToLine()">
+                    <span>💬</span> LINE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">生成中...</div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <!-- 底部導航 -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <button class="nav-btn active" onclick="showPage('home',this)">
+                <span class="icon">🏠</span>
+                <span>首頁</span>
+            </button>
+            <button class="nav-btn" onclick="showPage('settings',this)">
+                <span class="icon">⚙️</span>
+                <span>設定</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- 設定面板 -->
+    <div class="settings" id="settings">
+        <div class="settings-header">
+            <div class="settings-title">⚙️ API 設定</div>
+            <button class="settings-close" onclick="closeSettings()">✕</button>
+        </div>
+
+        <div class="setting-group">
+            <div class="setting-label">🔗 GAS 部署 URL</div>
+            <input type="url" class="setting-input" id="gasUrl" placeholder="https://script.google.com/...">
+        </div>
+
+        <div class="setting-group">
+            <div class="setting-label">🔑 Replicate API Token</div>
+            <input type="password" class="setting-input" id="repToken" placeholder="r8_...">
+            <div style="font-size:11px;color:var(--text2);margin-top:6px;">
+                <a href="https://replicate.com/account/api-tokens" target="_blank" style="color:var(--accent);">取得 Token →</a>
+            </div>
+        </div>
+
+        <div class="setting-group">
+            <div class="setting-label">👤 LINE User ID</div>
+            <input type="text" class="setting-input" id="lineUserId" placeholder="U...">
+        </div>
+
+        <div class="setting-group">
+            <div class="setting-label">🖼️ ImgBB API Key（上傳圖片用）</div>
+            <input type="password" class="setting-input" id="imgbbKey" placeholder="...">
+            <div style="font-size:11px;color:var(--text2);margin-top:6px;">
+                <a href="https://api.imgbb.com/" target="_blank" style="color:var(--accent);">取得 Key →</a>
+            </div>
+        </div>
+
+        <button class="save-btn" onclick="saveSettings()">💾 儲存設定</button>
+    </div>
+
+    <script>
+    // ========== 設定 ==========
+    const KEYS = ['gasUrl', 'repToken', 'lineUserId', 'imgbbKey'];
+    let cfg = {};
+    
+    // 模型設定
+    const MODELS = {
+        'kling': { name: 'Kling 2.5', model: 'kling-ai/kling-2.5-turbo-pro', type: 'both' },
+        'hailuo': { name: 'Hailuo', model: 'minimax/video-01', type: 'both' },
+        'wan': { name: 'Wan Video', model: 'wan-video/wan-2.1-t2v-480p', type: 'text' },
+        'svd': { name: 'Stable Video', model: 'stability-ai/stable-video-diffusion', type: 'image' }
+    };
+    
+    // 狀態
+    let currentMode = 'text';
+    let currentModel = 'kling';
+    let currentDuration = 5;
+    let currentRatio = '16:9';
+    let uploadedImage = null;
+    let generatedVideoUrl = null;
+    
+    // ========== 初始化 ==========
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSettings();
+        setTimeout(() => document.getElementById('splash').classList.add('hide'), 3000);
+    });
+    
+    function loadSettings() {
+        KEYS.forEach(k => {
+            cfg[k] = localStorage.getItem('video_' + k) || '';
+            const el = document.getElementById(k);
+            if (el) el.value = cfg[k];
+        });
+    }
+    
+    function saveSettings() {
+        KEYS.forEach(k => {
+            const el = document.getElementById(k);
+            if (el) {
+                cfg[k] = el.value.trim();
+                localStorage.setItem('video_' + k, cfg[k]);
+            }
+        });
+        toast('✅ 設定已儲存');
+        closeSettings();
+    }
+    
+    // ========== UI 控制 ==========
+    function showPage(page, btn) {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        if (page === 'settings') {
+            document.getElementById('settings').classList.add('show');
+        } else {
+            closeSettings();
+        }
+    }
+    
+    function closeSettings() {
+        document.getElementById('settings').classList.remove('show');
+    }
+    
+    function setMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+        document.getElementById('textSection').classList.toggle('hide', mode !== 'text');
+        document.getElementById('imageSection').classList.toggle('hide', mode !== 'image');
+        
+        // 自動調整模型
+        if (mode === 'image' && MODELS[currentModel].type === 'text') {
+            setModel('svd');
+        }
+        if (mode === 'text' && MODELS[currentModel].type === 'image') {
+            setModel('kling');
+        }
+    }
+    
+    function setModel(model) {
+        currentModel = model;
+        document.querySelectorAll('.model-option').forEach(m => m.classList.toggle('active', m.dataset.model === model));
+        
+        // 檢查模型是否支援當前模式
+        const m = MODELS[model];
+        if (m.type === 'text' && currentMode === 'image') {
+            toast('⚠️ 此模型僅支援文字生影片');
+            setMode('text');
+        }
+        if (m.type === 'image' && currentMode === 'text') {
+            toast('⚠️ 此模型僅支援圖片生影片');
+            setMode('image');
+        }
+    }
+    
+    function setDuration(d) {
+        currentDuration = d;
+        document.querySelectorAll('[data-duration]').forEach(b => b.classList.toggle('active', b.dataset.duration == d));
+    }
+    
+    function setRatio(r) {
+        currentRatio = r;
+        document.querySelectorAll('[data-ratio]').forEach(b => b.classList.toggle('active', b.dataset.ratio === r));
+    }
+    
+    // ========== 圖片上傳 ==========
+    function handleImageUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            uploadedImage = ev.target.result;
+            document.getElementById('imagePreview').src = uploadedImage;
+            document.getElementById('uploadZone').classList.add('has-image');
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    // ========== 生成影片 ==========
+    async function generateVideo() {
+        // 驗證
+        if (!cfg.gasUrl) { toast('⚠️ 請先設定 GAS URL'); return; }
+        
+        const prompt = currentMode === 'text' 
+            ? document.getElementById('promptInput').value.trim()
+            : document.getElementById('imagePrompt').value.trim();
+        
+        if (currentMode === 'text' && !prompt) {
+            toast('⚠️ 請輸入影片描述');
+            return;
+        }
+        
+        if (currentMode === 'image' && !uploadedImage) {
+            toast('⚠️ 請上傳圖片');
+            return;
+        }
+        
+        // 開始生成
+        showLoading(true, '🎬 影片生成中...\n預計需要 1-5 分鐘');
+        showProgress(true);
+        updateStatus('⏳ 正在排隊生成...', 'info');
+        
+        const startTime = Date.now();
+        
+        try {
+            const res = await fetch(cfg.gasUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                body: JSON.stringify({
+                    action: 'generateVideo',
+                    mode: currentMode,
+                    prompt: prompt,
+                    image: currentMode === 'image' ? uploadedImage : null,
+                    model: currentModel,
+                    duration: currentDuration,
+                    ratio: currentRatio
+                })
+            });
+            
+            const data = await res.json();
+            
+            if (data.ok) {
+                // 開始輪詢狀態
+                await pollStatus(data.id, startTime);
+            } else {
+                throw new Error(data.err || '生成失敗');
+            }
+            
+        } catch (e) {
+            console.error(e);
+            updateStatus('❌ ' + e.message, 'err');
+            toast('❌ 生成失敗');
+        } finally {
+            showLoading(false);
+        }
+    }
+    
+    async function pollStatus(id, startTime) {
+        const maxAttempts = 120; // 最多等 10 分鐘
+        let attempt = 0;
+        
+        while (attempt < maxAttempts) {
+            attempt++;
+            
+            try {
+                const res = await fetch(cfg.gasUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                    body: JSON.stringify({
+                        action: 'checkStatus',
+                        id: id
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.status === 'succeeded') {
+                    // 成功！
+                    generatedVideoUrl = data.output;
+                    const elapsed = Math.round((Date.now() - startTime) / 1000);
+                    showResult(elapsed);
+                    updateStatus('✅ 影片生成完成！', 'ok');
+                    showProgress(false);
+                    toast('🎉 影片生成完成！');
+                    return;
+                } else if (data.status === 'failed') {
+                    throw new Error(data.error || '生成失敗');
+                } else {
+                    // 還在處理中
+                    const progress = Math.min(90, attempt * 1.5);
+                    updateProgress(progress, `處理中... ${Math.round(progress)}%`);
+                }
+                
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+            
+            // 等待 5 秒後再查詢
+            await new Promise(r => setTimeout(r, 5000));
+        }
+        
+        throw new Error('生成超時，請重試');
+    }
+    
+    function showResult(elapsed) {
+        document.getElementById('resultCard').classList.add('show');
+        document.getElementById('resultVideo').src = generatedVideoUrl;
+        document.getElementById('resultModel').textContent = MODELS[currentModel].name;
+        document.getElementById('resultDuration').textContent = currentDuration + ' 秒';
+        document.getElementById('resultTime').textContent = elapsed + ' 秒';
+    }
+    
+    // ========== 下載/分享 ==========
+    function downloadVideo() {
+        if (!generatedVideoUrl) return;
+        
+        const link = document.createElement('a');
+        link.href = generatedVideoUrl;
+        link.download = `ai_video_${Date.now()}.mp4`;
+        link.click();
+        toast('✅ 開始下載');
+    }
+    
+    async function shareVideo() {
+        if (!generatedVideoUrl) return;
+        
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'AI 生成影片',
+                    text: '看看我用 AI 生成的影片！',
+                    url: generatedVideoUrl
+                });
+            } catch (e) {
+                copyToClipboard(generatedVideoUrl);
+            }
+        } else {
+            copyToClipboard(generatedVideoUrl);
+        }
+    }
+    
+    async function pushToLine() {
+        if (!generatedVideoUrl) return;
+        if (!cfg.lineUserId) { toast('⚠️ 請先設定 LINE User ID'); return; }
+        
+        showLoading(true, '💬 推送到 LINE...');
+        
+        try {
+            await fetch(cfg.gasUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                body: JSON.stringify({
+                    action: 'pushVideoToLine',
+                    videoUrl: generatedVideoUrl,
+                    userId: cfg.lineUserId,
+                    model: MODELS[currentModel].name,
+                    duration: currentDuration
+                }),
+                mode: 'no-cors'
+            });
+            
+            toast('✅ 已推送到 LINE！');
+        } catch (e) {
+            toast('❌ 推送失敗');
+        } finally {
+            showLoading(false);
+        }
+    }
+    
+    // ========== 工具函數 ==========
+    function showLoading(show, text = '') {
+        document.getElementById('loading').classList.toggle('show', show);
+        document.getElementById('loadingText').innerHTML = text.replace(/\n/g, '<br>');
+        document.getElementById('genBtn').disabled = show;
+    }
+    
+    function showProgress(show) {
+        document.getElementById('progressWrap').classList.toggle('show', show);
+    }
+    
+    function updateProgress(percent, text) {
+        document.getElementById('progressFill').style.width = percent + '%';
+        document.getElementById('progressText').textContent = text;
+    }
+    
+    function updateStatus(msg, type) {
+        const el = document.getElementById('statusBox');
+        el.textContent = msg;
+        el.className = 'status show ' + type;
+    }
+    
+    function toast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2500);
+    }
+    
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            toast('✅ 已複製連結');
+        }).catch(() => {
+            toast('⚠️ 複製失敗');
+        });
+    }
+    </script>
+</body>
+</html>
