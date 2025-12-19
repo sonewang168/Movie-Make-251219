@@ -6,19 +6,41 @@
 
 - 📝 **文字生影片** - 輸入描述，AI 生成影片
 - 🖼️ **圖片生影片** - 上傳圖片，AI 讓它動起來
+- ✨ **AI 優化提示詞** - Gemini / Groq 自動優化描述（二合一）
 - 🤖 **多模型支援** - Kling / Hailuo / Wan / Stable Video
 - ⏱️ **時長選擇** - 5秒 / 10秒
 - 📐 **比例選擇** - 16:9 / 9:16 / 1:1
 - 📥 **下載分享** - 下載影片、分享連結
 - 💬 **LINE 推送** - 直接發送到 LINE
 
+## 🆕 AI 提示詞優化
+
+簡單輸入 → AI 自動擴充為專業提示詞！
+
+| 原始輸入 | AI 優化後 |
+|---------|----------|
+| 貓咪在草地上 | A fluffy orange cat running through a sunlit meadow with wildflowers, cinematic slow motion, golden hour lighting... |
+| 讓頭髮飄動 | Gentle wind blowing through the hair with natural flowing motion, soft fabric movement... |
+
+支援兩個 AI 引擎（二選一即可）：
+- 💎 **Gemini** - 免費額度大，品質好
+- ⚡ **Groq** - 速度超快
+
 ## 🚀 快速開始
 
-### 1️⃣ 取得 Replicate Token
+### 1️⃣ 取得 API Keys
 
+**Replicate Token（必要）**
 1. 前往 https://replicate.com/account/api-tokens
-2. 建立新 Token
-3. 複製 Token（r8_xxx 格式）
+2. 建立新 Token（r8_xxx 格式）
+
+**Gemini API Key（AI 優化用，選填）**
+1. 前往 https://aistudio.google.com/app/apikey
+2. 建立 API Key（AIza... 格式）
+
+**Groq API Key（AI 優化用，選填）**
+1. 前往 https://console.groq.com/keys
+2. 建立 API Key（gsk_... 格式）
 
 ### 2️⃣ 部署 GAS
 

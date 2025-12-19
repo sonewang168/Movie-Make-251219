@@ -249,6 +249,83 @@
         textarea:focus { outline:none; border-color:var(--primary); }
         textarea::placeholder { color:var(--text2); }
         
+        /* 輸入區標題列 */
+        .input-header {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:10px;
+            font-size:13px;
+            color:var(--text2);
+        }
+        .clear-btn {
+            padding:6px 12px;
+            background:rgba(239,68,68,0.15);
+            border:1px solid rgba(239,68,68,0.3);
+            border-radius:8px;
+            color:#f87171;
+            font-size:12px;
+            cursor:pointer;
+            transition:all 0.3s;
+        }
+        .clear-btn:hover {
+            background:rgba(239,68,68,0.25);
+            border-color:rgba(239,68,68,0.5);
+        }
+        .clear-image-btn {
+            width:100%;
+            margin-top:10px;
+            padding:10px;
+        }
+        
+        /* 標題按鈕組 */
+        .header-btns {
+            display:flex;
+            gap:8px;
+        }
+        .enhance-btn {
+            padding:6px 12px;
+            background:linear-gradient(135deg,rgba(168,85,247,0.2),rgba(236,72,153,0.2));
+            border:1px solid rgba(168,85,247,0.4);
+            border-radius:8px;
+            color:#c084fc;
+            font-size:12px;
+            cursor:pointer;
+            transition:all 0.3s;
+        }
+        .enhance-btn:hover {
+            background:linear-gradient(135deg,rgba(168,85,247,0.3),rgba(236,72,153,0.3));
+            border-color:rgba(168,85,247,0.6);
+            transform:scale(1.02);
+        }
+        
+        /* AI 優化引擎選擇 */
+        .ai-enhance-row {
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-top:16px;
+            padding:12px;
+            background:rgba(168,85,247,0.05);
+            border:1px solid rgba(168,85,247,0.2);
+            border-radius:12px;
+        }
+        .ai-enhance-label {
+            font-size:13px;
+            color:var(--text2);
+        }
+        .enhance-select {
+            flex:1;
+            padding:8px 12px;
+            background:rgba(0,0,0,0.3);
+            border:1px solid var(--border);
+            border-radius:8px;
+            color:var(--text);
+            font-size:13px;
+            cursor:pointer;
+        }
+        .enhance-select:focus { outline:none; border-color:var(--primary); }
+        
         /* 圖片上傳區 */
         .upload-zone {
             border:2px dashed var(--border);
@@ -630,7 +707,14 @@
 
             <!-- 文字輸入 -->
             <div class="input-section" id="textSection">
-                <textarea id="promptInput" placeholder="描述你想要的影片內容...&#10;&#10;例如：&#10;• 一隻貓咪在草地上奔跑&#10;• 日落時分的海灘浪花&#10;• 未來城市的霓虹燈夜景"></textarea>
+                <div class="input-header">
+                    <span>✏️ 影片描述</span>
+                    <div class="header-btns">
+                        <button class="enhance-btn" onclick="enhancePrompt('text')">✨ AI 優化</button>
+                        <button class="clear-btn" onclick="clearPrompt()">🗑️ 清除</button>
+                    </div>
+                </div>
+                <textarea id="promptInput" placeholder="描述你想要的影片內容...&#10;&#10;例如：&#10;• 一隻貓咪在草地上奔跑&#10;• 日落時分的海灘浪花&#10;• 未來城市的霓虹燈夜景&#10;&#10;💡 點擊「AI 優化」讓描述更精彩！"></textarea>
             </div>
 
             <!-- 圖片上傳 -->
@@ -640,8 +724,26 @@
                     <div class="upload-text">點擊上傳圖片<br><small>支援 JPG、PNG</small></div>
                     <img class="upload-preview" id="imagePreview">
                 </div>
+                <button class="clear-btn clear-image-btn" id="clearImageBtn" onclick="clearImage(event)" style="display:none;">🗑️ 移除圖片</button>
                 <input type="file" id="imageInput" accept="image/*" onchange="handleImageUpload(event)">
-                <textarea id="imagePrompt" placeholder="描述圖片的動態效果（選填）&#10;例如：讓人物微笑、讓水流動..." style="margin-top:12px;min-height:80px;"></textarea>
+                <div class="input-header" style="margin-top:12px;">
+                    <span>✏️ 動態描述（選填）</span>
+                    <div class="header-btns">
+                        <button class="enhance-btn" onclick="enhancePrompt('image')">✨ AI 優化</button>
+                        <button class="clear-btn" onclick="clearImagePrompt()">🗑️ 清除</button>
+                    </div>
+                </div>
+                <textarea id="imagePrompt" placeholder="描述圖片的動態效果（選填）&#10;例如：讓人物微笑、讓水流動...&#10;&#10;💡 點擊「AI 優化」讓動態更生動！"></textarea>
+            </div>
+            
+            <!-- AI 優化模型選擇 -->
+            <div class="ai-enhance-row">
+                <span class="ai-enhance-label">🤖 優化引擎：</span>
+                <select id="enhanceModel" class="enhance-select">
+                    <option value="auto">🔄 自動（Gemini 優先）</option>
+                    <option value="gemini">💎 Gemini</option>
+                    <option value="groq">⚡ Groq（快速）</option>
+                </select>
             </div>
         </div>
 
@@ -799,13 +901,33 @@
                 <a href="https://api.imgbb.com/" target="_blank" style="color:var(--accent);">取得 Key →</a>
             </div>
         </div>
+        
+        <div class="setting-group" style="border:1px solid rgba(168,85,247,0.3);background:rgba(168,85,247,0.05);">
+            <div class="setting-label" style="color:#c084fc;">✨ AI 提示詞優化（二選一即可）</div>
+            
+            <div style="margin-top:12px;">
+                <div class="setting-label">💎 Gemini API Key</div>
+                <input type="password" class="setting-input" id="geminiKey" placeholder="AIza...">
+                <div style="font-size:11px;color:var(--text2);margin-top:6px;">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);">取得 Key →</a> 免費額度大
+                </div>
+            </div>
+            
+            <div style="margin-top:12px;">
+                <div class="setting-label">⚡ Groq API Key</div>
+                <input type="password" class="setting-input" id="groqKey" placeholder="gsk_...">
+                <div style="font-size:11px;color:var(--text2);margin-top:6px;">
+                    <a href="https://console.groq.com/keys" target="_blank" style="color:var(--accent);">取得 Key →</a> 速度超快
+                </div>
+            </div>
+        </div>
 
         <button class="save-btn" onclick="saveSettings()">💾 儲存設定</button>
     </div>
 
     <script>
     // ========== 設定 ==========
-    const KEYS = ['gasUrl', 'repToken', 'lineUserId', 'imgbbKey'];
+    const KEYS = ['gasUrl', 'repToken', 'lineUserId', 'imgbbKey', 'geminiKey', 'groqKey'];
     let cfg = {};
     
     // 模型設定
@@ -917,8 +1039,88 @@
             uploadedImage = ev.target.result;
             document.getElementById('imagePreview').src = uploadedImage;
             document.getElementById('uploadZone').classList.add('has-image');
+            document.getElementById('clearImageBtn').style.display = 'block';
         };
         reader.readAsDataURL(file);
+    }
+    
+    // ========== 清除功能 ==========
+    function clearPrompt() {
+        document.getElementById('promptInput').value = '';
+        toast('✅ 已清除');
+    }
+    
+    function clearImagePrompt() {
+        document.getElementById('imagePrompt').value = '';
+        toast('✅ 已清除');
+    }
+    
+    function clearImage(e) {
+        e.stopPropagation();
+        uploadedImage = null;
+        document.getElementById('imageInput').value = '';
+        document.getElementById('imagePreview').src = '';
+        document.getElementById('uploadZone').classList.remove('has-image');
+        document.getElementById('clearImageBtn').style.display = 'none';
+        toast('✅ 已移除圖片');
+    }
+    
+    // ========== AI 優化提示詞 ==========
+    async function enhancePrompt(type) {
+        const textarea = type === 'text' 
+            ? document.getElementById('promptInput')
+            : document.getElementById('imagePrompt');
+        
+        const originalPrompt = textarea.value.trim();
+        
+        if (!originalPrompt) {
+            toast('⚠️ 請先輸入描述內容');
+            return;
+        }
+        
+        if (!cfg.gasUrl) {
+            toast('⚠️ 請先設定 GAS URL');
+            return;
+        }
+        
+        if (!cfg.geminiKey && !cfg.groqKey) {
+            toast('⚠️ 請先設定 Gemini 或 Groq API Key');
+            return;
+        }
+        
+        const enhanceModel = document.getElementById('enhanceModel').value;
+        
+        showLoading(true, '✨ AI 優化中...');
+        
+        try {
+            const res = await fetch(cfg.gasUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                body: JSON.stringify({
+                    action: 'enhancePrompt',
+                    prompt: originalPrompt,
+                    type: type, // 'text' 或 'image'
+                    model: enhanceModel,
+                    geminiKey: cfg.geminiKey,
+                    groqKey: cfg.groqKey
+                })
+            });
+            
+            const data = await res.json();
+            
+            if (data.ok && data.enhanced) {
+                textarea.value = data.enhanced;
+                toast(`✅ 已用 ${data.usedModel} 優化！`);
+            } else {
+                throw new Error(data.err || '優化失敗');
+            }
+            
+        } catch (e) {
+            console.error(e);
+            toast('❌ ' + e.message);
+        } finally {
+            showLoading(false);
+        }
     }
     
     // ========== 生成影片 ==========

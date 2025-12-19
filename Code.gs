@@ -146,6 +146,11 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     const cfg = getConfig();
     
+    // AI 優化提示詞
+    if (data.action === 'enhancePrompt') {
+      return handleEnhancePrompt(data);
+    }
+    
     // 生成影片
     if (data.action === 'generateVideo') {
       return handleGenerateVideo(data, cfg);
@@ -167,6 +172,133 @@ function doPost(e) {
     console.error(err);
     return jsonResponse({ ok: false, err: err.message });
   }
+}
+
+// ========== AI 優化提示詞 ==========
+function handleEnhancePrompt(data) {
+  const prompt = data.prompt;
+  const type = data.type || 'text'; // 'text' 或 'image'
+  const model = data.model || 'auto';
+  const geminiKey = data.geminiKey;
+  const groqKey = data.groqKey;
+  
+  // 系統提示詞
+  const systemPrompt = type === 'text' 
+    ? `你是一位專業的 AI 影片生成提示詞專家。請將用戶的簡短描述擴充為更詳細、更有畫面感的英文提示詞。
+
+要求：
+1. 輸出純英文，適合 AI 影片生成模型
+2. 加入具體的視覺細節（光線、色彩、氛圍）
+3. 加入鏡頭運動描述（如 slow motion, tracking shot, cinematic）
+4. 加入時間/天氣/環境描述
+5. 控制在 2-3 句話內，不要太長
+6. 只輸出優化後的提示詞，不要任何解釋
+
+範例：
+輸入：貓咪在草地上
+輸出：A fluffy orange cat running through a sunlit meadow with wildflowers, cinematic slow motion, golden hour lighting, shallow depth of field, gentle breeze moving the grass`
+
+    : `你是一位專業的 AI 影片生成提示詞專家。請將用戶對圖片動態效果的描述擴充為更詳細的英文提示詞。
+
+要求：
+1. 輸出純英文，適合圖片轉影片模型
+2. 描述具體的動態效果和運動方向
+3. 加入自然的物理效果（如風吹、水流、光影變化）
+4. 控制在 1-2 句話內
+5. 只輸出優化後的提示詞，不要任何解釋
+
+範例：
+輸入：讓頭髮飄動
+輸出：Gentle wind blowing through the hair with natural flowing motion, soft fabric movement, subtle lighting changes`;
+
+  // 決定使用哪個模型
+  let usedModel = '';
+  let enhanced = '';
+  
+  if (model === 'gemini' || (model === 'auto' && geminiKey)) {
+    if (!geminiKey) {
+      return jsonResponse({ ok: false, err: '請設定 Gemini API Key' });
+    }
+    enhanced = callGemini(prompt, systemPrompt, geminiKey);
+    usedModel = 'Gemini';
+  } else if (model === 'groq' || (model === 'auto' && groqKey)) {
+    if (!groqKey) {
+      return jsonResponse({ ok: false, err: '請設定 Groq API Key' });
+    }
+    enhanced = callGroq(prompt, systemPrompt, groqKey);
+    usedModel = 'Groq';
+  } else {
+    return jsonResponse({ ok: false, err: '請至少設定一個 AI API Key（Gemini 或 Groq）' });
+  }
+  
+  return jsonResponse({
+    ok: true,
+    enhanced: enhanced,
+    usedModel: usedModel
+  });
+}
+
+// ========== 呼叫 Gemini API ==========
+function callGemini(prompt, systemPrompt, apiKey) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  
+  const payload = {
+    contents: [{
+      parts: [{ text: systemPrompt + '\n\n用戶輸入：' + prompt }]
+    }],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 500
+    }
+  };
+  
+  const res = UrlFetchApp.fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  
+  const data = JSON.parse(res.getContentText());
+  
+  if (data.error) {
+    throw new Error(data.error.message || 'Gemini API 錯誤');
+  }
+  
+  return data.candidates[0].content.parts[0].text.trim();
+}
+
+// ========== 呼叫 Groq API ==========
+function callGroq(prompt, systemPrompt, apiKey) {
+  const url = 'https://api.groq.com/openai/v1/chat/completions';
+  
+  const payload = {
+    model: 'llama-3.3-70b-versatile',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 500
+  };
+  
+  const res = UrlFetchApp.fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + apiKey,
+      'Content-Type': 'application/json'
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  
+  const data = JSON.parse(res.getContentText());
+  
+  if (data.error) {
+    throw new Error(data.error.message || 'Groq API 錯誤');
+  }
+  
+  return data.choices[0].message.content.trim();
 }
 
 // ========== 生成影片 ==========
