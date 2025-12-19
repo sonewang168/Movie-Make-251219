@@ -33,6 +33,8 @@ function doGet() {
     input:focus{outline:none;border-color:#a855f7;}
     .btn{width:100%;padding:16px;background:linear-gradient(135deg,#a855f7,#ec4899);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:bold;cursor:pointer;margin-top:20px;}
     .btn:hover{opacity:0.9;}
+    .test-btn{width:100%;padding:12px;margin-top:10px;background:linear-gradient(135deg,#06c755,#04a344);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:bold;cursor:pointer;}
+    .test-btn:hover{opacity:0.9;}
     .status{padding:12px;border-radius:8px;margin-top:16px;text-align:center;display:none;}
     .status.show{display:block;}
     .status.ok{background:rgba(16,185,129,0.2);color:#34d399;}
@@ -54,11 +56,13 @@ function doGet() {
     <div class="card">
       <div class="card-title">🔐 LINE Channel Access Token</div>
       <input type="password" id="lineToken" placeholder="LINE Bot Token">
+      <small><a href="https://developers.line.biz/console/" target="_blank">LINE Developers →</a></small>
     </div>
     
     <div class="card">
       <div class="card-title">👤 LINE User ID</div>
       <input type="text" id="lineUserId" placeholder="U...">
+      <button class="test-btn" onclick="testLine()">🔗 測試 LINE 連線</button>
     </div>
     
     <div class="card">
@@ -102,6 +106,27 @@ function doGet() {
       el.textContent = msg;
       el.className = 'status show ' + type;
     }
+    
+    function testLine() {
+      const token = document.getElementById('lineToken').value.trim();
+      const userId = document.getElementById('lineUserId').value.trim();
+      
+      if (!token) { showStatus('⚠️ 請先填入 LINE Token', 'err'); return; }
+      if (!userId) { showStatus('⚠️ 請先填入 LINE User ID', 'err'); return; }
+      
+      showStatus('🔄 測試中...', 'ok');
+      
+      google.script.run
+        .withSuccessHandler(result => {
+          if (result.ok) {
+            showStatus('✅ LINE 連線成功！請查看 LINE', 'ok');
+          } else {
+            showStatus('❌ ' + result.err, 'err');
+          }
+        })
+        .withFailureHandler(e => showStatus('❌ ' + e.message, 'err'))
+        .testLineFromGAS(token, userId);
+    }
   </script>
 </body>
 </html>
@@ -114,6 +139,59 @@ function saveConfig(cfg) {
   props.setProperty('LINE_TOKEN', cfg.lineToken || '');
   props.setProperty('LINE_USER_ID', cfg.lineUserId || '');
   props.setProperty('IMGBB_KEY', cfg.imgbbKey || '');
+}
+
+// 從 GAS 設定頁面測試 LINE
+function testLineFromGAS(token, userId) {
+  console.log('testLineFromGAS - Token length:', token ? token.length : 0);
+  console.log('testLineFromGAS - UserId:', userId);
+  
+  if (!token) {
+    return { ok: false, err: '請填入 LINE Token' };
+  }
+  if (!userId) {
+    return { ok: false, err: '請填入 LINE User ID' };
+  }
+  if (!userId.startsWith('U')) {
+    return { ok: false, err: 'User ID 格式錯誤，應以 U 開頭' };
+  }
+  
+  try {
+    const time = Utilities.formatDate(new Date(), 'Asia/Taipei', 'MM/dd HH:mm');
+    
+    const url = 'https://api.line.me/v2/bot/message/push';
+    const res = UrlFetchApp.fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify({
+        to: userId,
+        messages: [{ 
+          type: 'text', 
+          text: `🎬 AI 影片生成器\n\n✅ LINE 連線成功！\n\n🔗 GAS 設定頁面測試\n🕐 ${time}` 
+        }]
+      }),
+      muteHttpExceptions: true
+    });
+    
+    const code = res.getResponseCode();
+    const body = res.getContentText();
+    
+    console.log('LINE Response:', code, body);
+    
+    if (code === 200) {
+      return { ok: true };
+    } else {
+      const err = JSON.parse(body);
+      return { ok: false, err: err.message || '推送失敗 (' + code + ')' };
+    }
+    
+  } catch (e) {
+    console.error('testLineFromGAS error:', e);
+    return { ok: false, err: e.message };
+  }
 }
 
 // ========== 模型設定 ==========
@@ -487,12 +565,19 @@ function getPrediction(id, token) {
 function handleTestLine(data, cfg) {
   const userId = data.userId || cfg.lineUserId;
   
+  console.log('Test LINE - Token:', cfg.lineToken ? '有設定' : '未設定');
+  console.log('Test LINE - UserId:', userId);
+  
   if (!cfg.lineToken) {
-    return jsonResponse({ ok: false, err: '請先在 GAS 設定 LINE Token' });
+    return jsonResponse({ ok: false, err: '請先在 GAS 設定頁面填入 LINE Token' });
   }
   
   if (!userId) {
     return jsonResponse({ ok: false, err: '請先設定 LINE User ID' });
+  }
+  
+  if (!userId.startsWith('U')) {
+    return jsonResponse({ ok: false, err: 'LINE User ID 格式錯誤，應以 U 開頭' });
   }
   
   try {
@@ -509,7 +594,8 @@ function handleTestLine(data, cfg) {
     return jsonResponse({ ok: true, msg: 'LINE 連線成功' });
     
   } catch (err) {
-    return jsonResponse({ ok: false, err: 'LINE 推送失敗：' + err.message });
+    console.error('LINE Test Error:', err);
+    return jsonResponse({ ok: false, err: err.message });
   }
 }
 
@@ -607,7 +693,10 @@ ${videoUrl}`;
 function push(userId, text, token) {
   const url = 'https://api.line.me/v2/bot/message/push';
   
-  UrlFetchApp.fetch(url, {
+  console.log('LINE Push to:', userId);
+  console.log('Token length:', token ? token.length : 0);
+  
+  const res = UrlFetchApp.fetch(url, {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + token,
@@ -619,6 +708,17 @@ function push(userId, text, token) {
     }),
     muteHttpExceptions: true
   });
+  
+  const code = res.getResponseCode();
+  const body = res.getContentText();
+  
+  console.log('LINE Response:', code, body);
+  
+  if (code !== 200) {
+    throw new Error('LINE 推送失敗: ' + body);
+  }
+  
+  return true;
 }
 
 // ========== ImgBB 上傳 ==========
