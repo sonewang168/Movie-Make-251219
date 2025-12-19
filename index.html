@@ -607,6 +607,21 @@
         }
         .setting-input:focus { outline:none; border-color:var(--primary); }
         
+        .test-line-btn {
+            width:100%;
+            padding:12px;
+            margin-top:10px;
+            background:linear-gradient(135deg,#06c755,#04a344);
+            border:none;
+            border-radius:10px;
+            color:#fff;
+            font-size:14px;
+            font-weight:600;
+            cursor:pointer;
+            transition:all 0.3s;
+        }
+        .test-line-btn:hover { transform:scale(1.02); opacity:0.9; }
+        
         .save-btn {
             width:100%;
             padding:16px;
@@ -892,6 +907,7 @@
         <div class="setting-group">
             <div class="setting-label">👤 LINE User ID</div>
             <input type="text" class="setting-input" id="lineUserId" placeholder="U...">
+            <button class="test-line-btn" onclick="testLineConnection()">🔗 測試 LINE 連線</button>
         </div>
 
         <div class="setting-group">
@@ -970,6 +986,47 @@
         });
         toast('✅ 設定已儲存');
         closeSettings();
+    }
+    
+    // ========== LINE 連線測試 ==========
+    async function testLineConnection() {
+        // 先儲存設定
+        saveSettings();
+        
+        if (!cfg.gasUrl) {
+            toast('⚠️ 請先設定 GAS URL');
+            return;
+        }
+        if (!cfg.lineUserId) {
+            toast('⚠️ 請先設定 LINE User ID');
+            return;
+        }
+        
+        showLoading(true, '🔗 測試 LINE 連線中...');
+        
+        try {
+            const res = await fetch(cfg.gasUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                body: JSON.stringify({
+                    action: 'testLine',
+                    userId: cfg.lineUserId
+                })
+            });
+            
+            const data = await res.json();
+            
+            if (data.ok) {
+                toast('✅ LINE 連線成功！請查看 LINE');
+            } else {
+                toast('❌ ' + (data.err || '連線失敗'));
+            }
+        } catch (e) {
+            console.error(e);
+            toast('❌ 連線失敗：' + e.message);
+        } finally {
+            showLoading(false);
+        }
     }
     
     // ========== UI 控制 ==========
@@ -1205,6 +1262,7 @@
                     // 成功！
                     generatedVideoUrl = data.output;
                     const elapsed = Math.round((Date.now() - startTime) / 1000);
+                    updateProgress(100, '✅ 完成！');
                     showResult(elapsed);
                     updateStatus('✅ 影片生成完成！', 'ok');
                     showProgress(false);
@@ -1213,9 +1271,12 @@
                 } else if (data.status === 'failed') {
                     throw new Error(data.error || '生成失敗');
                 } else {
-                    // 還在處理中
-                    const progress = Math.min(90, attempt * 1.5);
-                    updateProgress(progress, `處理中... ${Math.round(progress)}%`);
+                    // 使用 GAS 返回的進度，或估算進度
+                    const elapsed = Math.round((Date.now() - startTime) / 1000);
+                    const progress = data.progress || Math.min(90, attempt * 1.5);
+                    const msg = data.progressMsg || `處理中... ${elapsed}秒`;
+                    updateProgress(progress, `${msg} (${elapsed}s)`);
+                    updateLoadingText(`🎬 ${msg}\n⏱️ 已等待 ${elapsed} 秒`);
                 }
                 
             } catch (e) {
@@ -1227,6 +1288,10 @@
         }
         
         throw new Error('生成超時，請重試');
+    }
+    
+    function updateLoadingText(text) {
+        document.getElementById('loadingText').innerHTML = text.replace(/\n/g, '<br>');
     }
     
     function showResult(elapsed) {

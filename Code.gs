@@ -146,9 +146,16 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     const cfg = getConfig();
     
+    console.log('Action:', data.action);
+    
     // AI 優化提示詞
     if (data.action === 'enhancePrompt') {
       return handleEnhancePrompt(data);
+    }
+    
+    // LINE 連線檢測
+    if (data.action === 'testLine') {
+      return handleTestLine(data, cfg);
     }
     
     // 生成影片
@@ -156,7 +163,7 @@ function doPost(e) {
       return handleGenerateVideo(data, cfg);
     }
     
-    // 查詢狀態
+    // 查詢狀態（含進度）
     if (data.action === 'checkStatus') {
       return handleCheckStatus(data, cfg);
     }
@@ -476,7 +483,37 @@ function getPrediction(id, token) {
   return JSON.parse(res.getContentText());
 }
 
-// ========== 查詢狀態 ==========
+// ========== LINE 連線檢測 ==========
+function handleTestLine(data, cfg) {
+  const userId = data.userId || cfg.lineUserId;
+  
+  if (!cfg.lineToken) {
+    return jsonResponse({ ok: false, err: '請先在 GAS 設定 LINE Token' });
+  }
+  
+  if (!userId) {
+    return jsonResponse({ ok: false, err: '請先設定 LINE User ID' });
+  }
+  
+  try {
+    const time = Utilities.formatDate(new Date(), 'Asia/Taipei', 'MM/dd HH:mm');
+    
+    push(userId, `🎬 AI 影片生成器
+
+✅ LINE 連線成功！
+
+🔗 已連接到您的 LINE
+🤖 影片生成完成後將自動推送
+🕐 ${time}`, cfg.lineToken);
+    
+    return jsonResponse({ ok: true, msg: 'LINE 連線成功' });
+    
+  } catch (err) {
+    return jsonResponse({ ok: false, err: 'LINE 推送失敗：' + err.message });
+  }
+}
+
+// ========== 查詢狀態（含進度）==========
 function handleCheckStatus(data, cfg) {
   if (!data.id) {
     return jsonResponse({ ok: false, err: 'Missing prediction ID' });
@@ -486,16 +523,48 @@ function handleCheckStatus(data, cfg) {
     const prediction = getPrediction(data.id, cfg.repToken);
     
     let output = null;
+    let progress = 0;
+    let progressMsg = '準備中...';
+    
     if (prediction.status === 'succeeded' && prediction.output) {
       // output 可能是字串或陣列
       output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+      progress = 100;
+      progressMsg = '完成！';
+    } else if (prediction.status === 'processing') {
+      // 根據 logs 估算進度
+      const logs = prediction.logs || '';
+      if (logs.includes('100%') || logs.includes('Finished')) {
+        progress = 95;
+        progressMsg = '即將完成...';
+      } else if (logs.includes('80%') || logs.includes('rendering')) {
+        progress = 80;
+        progressMsg = '渲染中...';
+      } else if (logs.includes('60%') || logs.includes('generating')) {
+        progress = 60;
+        progressMsg = '生成影格中...';
+      } else if (logs.includes('40%') || logs.includes('processing')) {
+        progress = 40;
+        progressMsg = '處理中...';
+      } else if (logs.includes('20%') || logs.includes('loading')) {
+        progress = 20;
+        progressMsg = '載入模型...';
+      } else {
+        progress = 10;
+        progressMsg = '排隊處理中...';
+      }
+    } else if (prediction.status === 'starting') {
+      progress = 5;
+      progressMsg = '啟動中...';
     }
     
     return jsonResponse({
       ok: true,
       status: prediction.status,
       output: output,
-      error: prediction.error
+      error: prediction.error,
+      progress: progress,
+      progressMsg: progressMsg
     });
     
   } catch (err) {
