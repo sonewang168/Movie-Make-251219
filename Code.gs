@@ -196,6 +196,11 @@ function testLineFromGAS(token, userId) {
 
 // ========== 模型設定 ==========
 const MODELS = {
+  'veo3': {
+    name: 'Google Veo 3',
+    version: 'google/veo-3',
+    type: 'both'
+  },
   'kling': {
     name: 'Kling 2.5',
     version: 'kwaivgi/kling-v1.6-pro:d7cccc656e46f646e88a4c607428dbda8885df4b590fac8d9e8ce7d05e327b26',
@@ -430,6 +435,16 @@ function buildTextToVideoInput(data, model) {
   const duration = data.duration || 5;
   const ratio = data.ratio || '16:9';
   
+  // Google Veo 3
+  if (model.version.includes('veo')) {
+    return {
+      prompt: prompt,
+      duration: duration,
+      aspect_ratio: ratio,
+      generate_audio: true  // Veo 3 支援原生音訊
+    };
+  }
+  
   // Kling
   if (model.version.includes('kling')) {
     return {
@@ -476,6 +491,16 @@ function buildImageToVideoInput(data, model, cfg) {
   
   const prompt = data.prompt || '';
   const duration = data.duration || 5;
+  
+  // Google Veo 3
+  if (model.version.includes('veo')) {
+    return {
+      image: imageUrl,
+      prompt: prompt || 'animate this image with natural motion',
+      duration: duration,
+      generate_audio: true
+    };
+  }
   
   // Stable Video Diffusion
   if (model.version.includes('stable-video')) {

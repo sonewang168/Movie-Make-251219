@@ -766,7 +766,12 @@
         <div class="card">
             <div class="card-title"><span>🤖</span> 選擇 AI 模型</div>
             <div class="model-grid">
-                <div class="model-option active" data-model="kling" onclick="setModel('kling')">
+                <div class="model-option active" data-model="veo3" onclick="setModel('veo3')">
+                    <div class="model-icon">🌟</div>
+                    <div class="model-name">Veo 3</div>
+                    <div class="model-desc">Google 頂級+音訊</div>
+                </div>
+                <div class="model-option" data-model="kling" onclick="setModel('kling')">
                     <div class="model-icon">🎬</div>
                     <div class="model-name">Kling 2.5</div>
                     <div class="model-desc">高品質電影感</div>
@@ -948,6 +953,7 @@
     
     // 模型設定
     const MODELS = {
+        'veo3': { name: 'Google Veo 3', model: 'google/veo-3', type: 'both' },
         'kling': { name: 'Kling 2.5', model: 'kling-ai/kling-2.5-turbo-pro', type: 'both' },
         'hailuo': { name: 'Hailuo', model: 'minimax/video-01', type: 'both' },
         'wan': { name: 'Wan Video', model: 'wan-video/wan-2.1-t2v-480p', type: 'text' },
@@ -956,7 +962,7 @@
     
     // 狀態
     let currentMode = 'text';
-    let currentModel = 'kling';
+    let currentModel = 'veo3';
     let currentDuration = 5;
     let currentRatio = '16:9';
     let uploadedImage = null;
