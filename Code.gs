@@ -199,27 +199,44 @@ const MODELS = {
   'veo3': {
     name: 'Google Veo 3',
     version: 'google/veo-3',
-    type: 'both'
+    type: 'both',
+    speed: 'slow',
+    eta: '2-4分鐘'
+  },
+  'veo3-fast': {
+    name: 'Veo 3 Fast',
+    version: 'google/veo-3-fast',
+    type: 'both',
+    speed: 'fast',
+    eta: '30-60秒'
   },
   'kling': {
     name: 'Kling 2.5',
     version: 'kwaivgi/kling-v1.6-pro:d7cccc656e46f646e88a4c607428dbda8885df4b590fac8d9e8ce7d05e327b26',
-    type: 'both'
+    type: 'both',
+    speed: 'medium',
+    eta: '1-3分鐘'
   },
   'hailuo': {
     name: 'Hailuo',
     version: 'minimax/video-01',
-    type: 'both'
+    type: 'both',
+    speed: 'medium',
+    eta: '1-2分鐘'
   },
   'wan': {
     name: 'Wan Video',
     version: 'wan-video/wan-2.1-t2v-480p',
-    type: 'text'
+    type: 'text',
+    speed: 'fast',
+    eta: '30-90秒'
   },
   'svd': {
     name: 'Stable Video',
     version: 'stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438',
-    type: 'image'
+    type: 'image',
+    speed: 'fast',
+    eta: '20-40秒'
   }
 };
 
@@ -397,7 +414,7 @@ function handleGenerateVideo(data, cfg) {
     return jsonResponse({ ok: false, err: '請先設定 Replicate Token' });
   }
   
-  const model = MODELS[data.model] || MODELS['kling'];
+  const model = MODELS[data.model] || MODELS['veo3'];
   let input = {};
   
   // 根據模式和模型設定參數
@@ -416,6 +433,19 @@ function handleGenerateVideo(data, cfg) {
   try {
     const prediction = createPrediction(model.version, input, cfg.repToken);
     console.log('Prediction ID:', prediction.id);
+    
+    // 背景模式：儲存任務以便後續通知
+    if (data.bgMode && data.lineUserId) {
+      savePendingTask({
+        id: prediction.id,
+        userId: data.lineUserId,
+        model: model.name,
+        startTime: new Date().toISOString()
+      });
+      
+      // 設定定時檢查 Trigger
+      setupBgCheckTrigger();
+    }
     
     return jsonResponse({
       ok: true,
@@ -773,4 +803,115 @@ function uploadToImgBB(base64Data, apiKey) {
 function jsonResponse(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ========== 背景任務管理 ==========
+function savePendingTask(task) {
+  const props = PropertiesService.getScriptProperties();
+  let pending = JSON.parse(props.getProperty('PENDING_TASKS') || '[]');
+  pending.push(task);
+  props.setProperty('PENDING_TASKS', JSON.stringify(pending));
+  console.log('Saved pending task:', task.id);
+}
+
+function removePendingTask(taskId) {
+  const props = PropertiesService.getScriptProperties();
+  let pending = JSON.parse(props.getProperty('PENDING_TASKS') || '[]');
+  pending = pending.filter(t => t.id !== taskId);
+  props.setProperty('PENDING_TASKS', JSON.stringify(pending));
+}
+
+function setupBgCheckTrigger() {
+  // 檢查是否已有 Trigger
+  const triggers = ScriptApp.getProjectTriggers();
+  const exists = triggers.some(t => t.getHandlerFunction() === 'checkPendingTasks');
+  
+  if (!exists) {
+    // 每分鐘檢查一次
+    ScriptApp.newTrigger('checkPendingTasks')
+      .timeBased()
+      .everyMinutes(1)
+      .create();
+    console.log('Created background check trigger');
+  }
+}
+
+function checkPendingTasks() {
+  const props = PropertiesService.getScriptProperties();
+  const cfg = getConfig();
+  
+  let pending = JSON.parse(props.getProperty('PENDING_TASKS') || '[]');
+  
+  if (pending.length === 0) {
+    // 沒有待處理任務，移除 Trigger
+    removeBgCheckTrigger();
+    return;
+  }
+  
+  console.log('Checking', pending.length, 'pending tasks');
+  
+  const stillPending = [];
+  
+  for (const task of pending) {
+    try {
+      const prediction = getPrediction(task.id, cfg.repToken);
+      
+      if (prediction.status === 'succeeded') {
+        // 成功！發送 LINE 通知
+        const output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+        const time = Utilities.formatDate(new Date(), 'Asia/Taipei', 'MM/dd HH:mm');
+        
+        const text = `🎬 AI 影片生成完成！
+
+✅ 背景生成成功
+
+🤖 模型：${task.model}
+🕐 完成時間：${time}
+
+📥 影片連結：
+${output}`;
+
+        push(task.userId, text, cfg.lineToken);
+        console.log('Sent LINE notification for task:', task.id);
+        
+      } else if (prediction.status === 'failed') {
+        // 失敗
+        const time = Utilities.formatDate(new Date(), 'Asia/Taipei', 'MM/dd HH:mm');
+        
+        push(task.userId, `🎬 AI 影片生成失敗
+
+❌ 背景生成失敗
+
+🤖 模型：${task.model}
+🕐 時間：${time}
+📝 錯誤：${prediction.error || '未知錯誤'}`, cfg.lineToken);
+        
+      } else {
+        // 還在處理中
+        stillPending.push(task);
+      }
+      
+    } catch (e) {
+      console.error('Error checking task', task.id, e);
+      stillPending.push(task);
+    }
+  }
+  
+  // 更新待處理列表
+  props.setProperty('PENDING_TASKS', JSON.stringify(stillPending));
+  
+  // 如果沒有待處理任務了，移除 Trigger
+  if (stillPending.length === 0) {
+    removeBgCheckTrigger();
+  }
+}
+
+function removeBgCheckTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const trigger of triggers) {
+    if (trigger.getHandlerFunction() === 'checkPendingTasks') {
+      ScriptApp.deleteTrigger(trigger);
+      console.log('Removed background check trigger');
+    }
+  }
 }

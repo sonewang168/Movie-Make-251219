@@ -375,6 +375,45 @@
         .model-name { font-size:13px; font-weight:600; }
         .model-desc { font-size:10px; color:var(--text2); margin-top:4px; }
         
+        .model-eta {
+            margin-top:12px;
+            padding:10px;
+            background:rgba(6,182,212,0.1);
+            border:1px solid rgba(6,182,212,0.3);
+            border-radius:10px;
+            font-size:13px;
+            color:var(--accent);
+            text-align:center;
+        }
+        
+        /* 背景生成模式 */
+        .bg-mode-row {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:14px 16px;
+            background:rgba(6,182,212,0.08);
+            border:1px solid rgba(6,182,212,0.2);
+            border-radius:12px;
+            margin-bottom:16px;
+        }
+        .bg-mode-label {
+            display:flex;
+            align-items:center;
+            gap:10px;
+            cursor:pointer;
+            font-size:14px;
+        }
+        .bg-mode-label input {
+            width:18px;
+            height:18px;
+            accent-color:var(--accent);
+        }
+        .bg-mode-hint {
+            font-size:11px;
+            color:var(--text2);
+        }
+        
         /* 設定選項 */
         .option-row {
             display:flex;
@@ -766,32 +805,38 @@
         <div class="card">
             <div class="card-title"><span>🤖</span> 選擇 AI 模型</div>
             <div class="model-grid">
+                <div class="model-option" data-model="veo3-fast" onclick="setModel('veo3-fast')">
+                    <div class="model-icon">⚡</div>
+                    <div class="model-name">Veo 3 Fast</div>
+                    <div class="model-desc">快速+音訊 ~1分鐘</div>
+                </div>
                 <div class="model-option active" data-model="veo3" onclick="setModel('veo3')">
                     <div class="model-icon">🌟</div>
                     <div class="model-name">Veo 3</div>
-                    <div class="model-desc">Google 頂級+音訊</div>
+                    <div class="model-desc">頂級品質 ~3分鐘</div>
                 </div>
                 <div class="model-option" data-model="kling" onclick="setModel('kling')">
                     <div class="model-icon">🎬</div>
                     <div class="model-name">Kling 2.5</div>
-                    <div class="model-desc">高品質電影感</div>
+                    <div class="model-desc">電影感 ~2分鐘</div>
                 </div>
                 <div class="model-option" data-model="hailuo" onclick="setModel('hailuo')">
                     <div class="model-icon">🌊</div>
                     <div class="model-name">Hailuo</div>
-                    <div class="model-desc">MiniMax 穩定</div>
+                    <div class="model-desc">穩定 ~1.5分鐘</div>
                 </div>
                 <div class="model-option" data-model="wan" onclick="setModel('wan')">
                     <div class="model-icon">🆓</div>
                     <div class="model-name">Wan Video</div>
-                    <div class="model-desc">開源免費快速</div>
+                    <div class="model-desc">免費快速 ~1分鐘</div>
                 </div>
                 <div class="model-option" data-model="svd" onclick="setModel('svd')">
                     <div class="model-icon">🎞️</div>
                     <div class="model-name">Stable Video</div>
-                    <div class="model-desc">圖片動畫化</div>
+                    <div class="model-desc">圖片動畫 ~30秒</div>
                 </div>
             </div>
+            <div class="model-eta" id="modelEta">⏱️ 預估時間：2-4分鐘</div>
         </div>
 
         <!-- 影片設定 -->
@@ -814,6 +859,16 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- 背景生成選項 -->
+        <div class="bg-mode-row">
+            <label class="bg-mode-label">
+                <input type="checkbox" id="bgMode" onchange="toggleBgMode()">
+                <span class="checkmark"></span>
+                <span>📲 背景生成模式</span>
+            </label>
+            <span class="bg-mode-hint">可關閉頁面，完成後 LINE 通知</span>
         </div>
 
         <!-- 生成按鈕 -->
@@ -953,11 +1008,12 @@
     
     // 模型設定
     const MODELS = {
-        'veo3': { name: 'Google Veo 3', model: 'google/veo-3', type: 'both' },
-        'kling': { name: 'Kling 2.5', model: 'kling-ai/kling-2.5-turbo-pro', type: 'both' },
-        'hailuo': { name: 'Hailuo', model: 'minimax/video-01', type: 'both' },
-        'wan': { name: 'Wan Video', model: 'wan-video/wan-2.1-t2v-480p', type: 'text' },
-        'svd': { name: 'Stable Video', model: 'stability-ai/stable-video-diffusion', type: 'image' }
+        'veo3-fast': { name: 'Veo 3 Fast', model: 'google/veo-3-fast', type: 'both', eta: '30-60秒' },
+        'veo3': { name: 'Google Veo 3', model: 'google/veo-3', type: 'both', eta: '2-4分鐘' },
+        'kling': { name: 'Kling 2.5', model: 'kling-ai/kling-2.5-turbo-pro', type: 'both', eta: '1-3分鐘' },
+        'hailuo': { name: 'Hailuo', model: 'minimax/video-01', type: 'both', eta: '1-2分鐘' },
+        'wan': { name: 'Wan Video', model: 'wan-video/wan-2.1-t2v-480p', type: 'text', eta: '30-90秒' },
+        'svd': { name: 'Stable Video', model: 'stability-ai/stable-video-diffusion', type: 'image', eta: '20-40秒' }
     };
     
     // 狀態
@@ -967,6 +1023,7 @@
     let currentRatio = '16:9';
     let uploadedImage = null;
     let generatedVideoUrl = null;
+    let currentPredictionId = null; // 追蹤生成 ID
     
     // ========== 初始化 ==========
     document.addEventListener('DOMContentLoaded', () => {
@@ -1070,8 +1127,11 @@
         currentModel = model;
         document.querySelectorAll('.model-option').forEach(m => m.classList.toggle('active', m.dataset.model === model));
         
-        // 檢查模型是否支援當前模式
+        // 更新預估時間
         const m = MODELS[model];
+        document.getElementById('modelEta').textContent = `⏱️ 預估時間：${m.eta}`;
+        
+        // 檢查模型是否支援當前模式
         if (m.type === 'text' && currentMode === 'image') {
             toast('⚠️ 此模型僅支援文字生影片');
             setMode('text');
@@ -1186,6 +1246,18 @@
         }
     }
     
+    // ========== 背景模式 ==========
+    let bgModeEnabled = false;
+    
+    function toggleBgMode() {
+        bgModeEnabled = document.getElementById('bgMode').checked;
+        if (bgModeEnabled && !cfg.lineUserId) {
+            toast('⚠️ 請先設定 LINE User ID 以接收通知');
+            document.getElementById('bgMode').checked = false;
+            bgModeEnabled = false;
+        }
+    }
+    
     // ========== 生成影片 ==========
     async function generateVideo() {
         // 驗證
@@ -1205,8 +1277,16 @@
             return;
         }
         
+        // 背景模式需要 LINE
+        const bgMode = document.getElementById('bgMode').checked;
+        if (bgMode && !cfg.lineUserId) {
+            toast('⚠️ 背景模式需要設定 LINE User ID');
+            return;
+        }
+        
         // 開始生成
-        showLoading(true, '🎬 影片生成中...\n預計需要 1-5 分鐘');
+        const eta = MODELS[currentModel].eta;
+        showLoading(true, `🎬 影片生成中...\n⏱️ 預估 ${eta}`);
         showProgress(true);
         updateStatus('⏳ 正在排隊生成...', 'info');
         
@@ -1223,15 +1303,34 @@
                     image: currentMode === 'image' ? uploadedImage : null,
                     model: currentModel,
                     duration: currentDuration,
-                    ratio: currentRatio
+                    ratio: currentRatio,
+                    bgMode: bgMode,
+                    lineUserId: cfg.lineUserId
                 })
             });
             
             const data = await res.json();
             
             if (data.ok) {
-                // 開始輪詢狀態
-                await pollStatus(data.id, startTime);
+                currentPredictionId = data.id;
+                
+                // 背景模式：提示可關閉頁面
+                if (bgMode) {
+                    showLoading(false);
+                    showProgress(false);
+                    updateStatus('📲 背景生成中！完成後將收到 LINE 通知\n可以關閉此頁面', 'ok');
+                    toast('📲 已啟動背景生成！');
+                    
+                    // 儲存到 localStorage 以便之後恢復
+                    localStorage.setItem('video_pending', JSON.stringify({
+                        id: data.id,
+                        model: currentModel,
+                        startTime: startTime
+                    }));
+                } else {
+                    // 前台模式：輪詢狀態
+                    await pollStatus(data.id, startTime);
+                }
             } else {
                 throw new Error(data.err || '生成失敗');
             }
@@ -1240,7 +1339,6 @@
             console.error(e);
             updateStatus('❌ ' + e.message, 'err');
             toast('❌ 生成失敗');
-        } finally {
             showLoading(false);
         }
     }
