@@ -740,7 +740,7 @@
 </head>
 <body>
     <!-- 開機動畫 -->
-    <div class="splash" id="splash">
+    <div class="splash" id="splash" onclick="hideSplash()">
         <div class="grid-bg"></div>
         <div class="splash-container">
             <div class="ring-outer"></div>
@@ -1069,9 +1069,24 @@
     
     // ========== 初始化 ==========
     document.addEventListener('DOMContentLoaded', () => {
-        loadSettings();
-        setTimeout(() => document.getElementById('splash').classList.add('hide'), 3000);
+        try {
+            loadSettings();
+        } catch(e) {
+            console.error('loadSettings error:', e);
+        }
+        
+        // 3秒後自動關閉開機畫面
+        setTimeout(hideSplash, 3000);
     });
+    
+    // 點擊也能關閉開機畫面
+    function hideSplash() {
+        const splash = document.getElementById('splash');
+        if (splash) splash.classList.add('hide');
+    }
+    
+    // 備援：5秒後強制關閉
+    setTimeout(hideSplash, 5000);
     
     function loadSettings() {
         KEYS.forEach(k => {
@@ -1479,8 +1494,6 @@
         // 顯示使用的平台
         const platformText = platform === 'fal' ? ' (fal.ai)' : ' (Replicate)';
         document.getElementById('resultModel').textContent += platformText;
-    }
-        document.getElementById('resultTime').textContent = elapsed + ' 秒';
     }
     
     // ========== 下載/分享 ==========
