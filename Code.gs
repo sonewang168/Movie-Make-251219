@@ -198,42 +198,50 @@ function testLineFromGAS(token, userId) {
 const MODELS = {
   'veo3': {
     name: 'Google Veo 3',
-    version: 'google/veo-3',
+    replicate: 'google/veo-3',
+    fal: 'fal-ai/veo3',
     type: 'both',
     speed: 'slow',
     eta: '2-4分鐘'
   },
   'veo3-fast': {
     name: 'Veo 3 Fast',
-    version: 'google/veo-3-fast',
+    replicate: 'google/veo-3-fast',
+    fal: 'fal-ai/veo3/fast',
     type: 'both',
     speed: 'fast',
     eta: '30-60秒'
   },
   'kling': {
-    name: 'Kling 2.5',
-    version: 'kwaivgi/kling-v1.6-pro:d7cccc656e46f646e88a4c607428dbda8885df4b590fac8d9e8ce7d05e327b26',
+    name: 'Kling 2.6',
+    replicate: 'kwaivgi/kling-v1.6-pro:d7cccc656e46f646e88a4c607428dbda8885df4b590fac8d9e8ce7d05e327b26',
+    fal: 'fal-ai/kling-video/v2.6/pro/text-to-video',
+    falI2v: 'fal-ai/kling-video/v2.6/pro/image-to-video',
     type: 'both',
     speed: 'medium',
     eta: '1-3分鐘'
   },
   'hailuo': {
     name: 'Hailuo',
-    version: 'minimax/video-01',
+    replicate: 'minimax/video-01',
+    fal: 'fal-ai/minimax/video-01/text-to-video',
+    falI2v: 'fal-ai/minimax/video-01/image-to-video',
     type: 'both',
     speed: 'medium',
     eta: '1-2分鐘'
   },
   'wan': {
     name: 'Wan Video',
-    version: 'wan-video/wan-2.1-t2v-480p',
+    replicate: 'wan-video/wan-2.1-t2v-480p',
+    fal: 'fal-ai/wan/v2.1/text-to-video',
     type: 'text',
     speed: 'fast',
     eta: '30-90秒'
   },
   'svd': {
     name: 'Stable Video',
-    version: 'stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438',
+    replicate: 'stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438',
+    fal: 'fal-ai/stable-video',
     type: 'image',
     speed: 'fast',
     eta: '20-40秒'
@@ -410,53 +418,166 @@ function callGroq(prompt, systemPrompt, apiKey) {
 
 // ========== 生成影片 ==========
 function handleGenerateVideo(data, cfg) {
-  if (!cfg.repToken) {
-    return jsonResponse({ ok: false, err: '請先設定 Replicate Token' });
-  }
-  
   const model = MODELS[data.model] || MODELS['veo3'];
-  let input = {};
+  const platform = data.platform || 'auto';
+  const falKey = data.falKey || '';
   
-  // 根據模式和模型設定參數
-  if (data.mode === 'text') {
-    // 文字生影片
-    input = buildTextToVideoInput(data, model);
+  console.log('Platform:', platform);
+  console.log('Model:', data.model);
+  
+  // 決定使用哪個平台
+  let useFal = false;
+  let useReplicate = false;
+  
+  if (platform === 'fal') {
+    useFal = true;
+  } else if (platform === 'replicate') {
+    useReplicate = true;
   } else {
-    // 圖片生影片
-    input = buildImageToVideoInput(data, model, cfg);
+    // auto 模式：優先 fal.ai
+    useFal = !!falKey;
+    useReplicate = !!cfg.repToken;
   }
   
-  console.log('Model:', model.version);
-  console.log('Input:', JSON.stringify(input));
+  // 檢查是否有可用平台
+  if (!useFal && !useReplicate) {
+    return jsonResponse({ ok: false, err: '請設定 fal.ai Key 或 Replicate Token' });
+  }
   
-  // 呼叫 Replicate API
-  try {
-    const prediction = createPrediction(model.version, input, cfg.repToken);
-    console.log('Prediction ID:', prediction.id);
-    
-    // 背景模式：儲存任務以便後續通知
-    if (data.bgMode && data.lineUserId) {
-      savePendingTask({
-        id: prediction.id,
-        userId: data.lineUserId,
-        model: model.name,
-        startTime: new Date().toISOString()
+  // 優先嘗試 fal.ai
+  if (useFal && falKey) {
+    try {
+      console.log('Trying fal.ai...');
+      const result = callFalAI(data, model, falKey, cfg);
+      
+      // 背景模式處理
+      if (data.bgMode && data.lineUserId) {
+        savePendingTask({
+          id: result.id,
+          platform: 'fal',
+          userId: data.lineUserId,
+          model: model.name,
+          startTime: new Date().toISOString()
+        });
+        setupBgCheckTrigger();
+      }
+      
+      return jsonResponse({
+        ok: true,
+        id: result.id,
+        status: result.status,
+        platform: 'fal'
       });
       
-      // 設定定時檢查 Trigger
-      setupBgCheckTrigger();
+    } catch (err) {
+      console.error('fal.ai error:', err);
+      
+      // auto 模式下嘗試備援
+      if (platform === 'auto' && cfg.repToken) {
+        console.log('fal.ai failed, trying Replicate...');
+      } else {
+        return jsonResponse({ ok: false, err: 'fal.ai: ' + err.message });
+      }
+    }
+  }
+  
+  // 使用 Replicate
+  if (useReplicate || platform === 'auto') {
+    if (!cfg.repToken) {
+      return jsonResponse({ ok: false, err: '請先設定 Replicate Token' });
     }
     
-    return jsonResponse({
-      ok: true,
-      id: prediction.id,
-      status: prediction.status
-    });
-    
-  } catch (err) {
-    console.error('Replicate error:', err);
-    return jsonResponse({ ok: false, err: err.message });
+    try {
+      console.log('Using Replicate...');
+      const input = data.mode === 'text' 
+        ? buildTextToVideoInput(data, model)
+        : buildImageToVideoInput(data, model, cfg);
+      
+      const prediction = createPrediction(model.replicate, input, cfg.repToken);
+      console.log('Replicate Prediction ID:', prediction.id);
+      
+      // 背景模式處理
+      if (data.bgMode && data.lineUserId) {
+        savePendingTask({
+          id: prediction.id,
+          platform: 'replicate',
+          userId: data.lineUserId,
+          model: model.name,
+          startTime: new Date().toISOString()
+        });
+        setupBgCheckTrigger();
+      }
+      
+      return jsonResponse({
+        ok: true,
+        id: prediction.id,
+        status: prediction.status,
+        platform: 'replicate'
+      });
+      
+    } catch (err) {
+      console.error('Replicate error:', err);
+      return jsonResponse({ ok: false, err: 'Replicate: ' + err.message });
+    }
   }
+  
+  return jsonResponse({ ok: false, err: '無可用平台' });
+}
+
+// ========== fal.ai API ==========
+function callFalAI(data, model, falKey, cfg) {
+  const mode = data.mode;
+  let endpoint = mode === 'text' ? model.fal : (model.falI2v || model.fal);
+  
+  // 建立輸入參數
+  let input = {
+    prompt: data.prompt || 'animate this image smoothly',
+    duration: String(data.duration || 5),
+    aspect_ratio: data.ratio || '16:9'
+  };
+  
+  // 圖片模式
+  if (mode === 'image' && data.image) {
+    let imageUrl = data.image;
+    if (imageUrl.startsWith('data:')) {
+      if (!cfg.imgbbKey) {
+        throw new Error('需要 ImgBB Key 來上傳圖片');
+      }
+      imageUrl = uploadToImgBB(imageUrl, cfg.imgbbKey);
+    }
+    input.image_url = imageUrl;
+  }
+  
+  console.log('fal.ai endpoint:', endpoint);
+  console.log('fal.ai input:', JSON.stringify(input));
+  
+  // 提交任務
+  const submitRes = UrlFetchApp.fetch('https://queue.fal.run/' + endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Key ' + falKey,
+      'Content-Type': 'application/json'
+    },
+    payload: JSON.stringify(input),
+    muteHttpExceptions: true
+  });
+  
+  const submitCode = submitRes.getResponseCode();
+  const submitBody = submitRes.getContentText();
+  
+  console.log('fal.ai submit response:', submitCode, submitBody);
+  
+  if (submitCode !== 200 && submitCode !== 201) {
+    const err = JSON.parse(submitBody);
+    throw new Error(err.detail || err.message || '提交失敗');
+  }
+  
+  const result = JSON.parse(submitBody);
+  
+  return {
+    id: result.request_id,
+    status: result.status || 'IN_QUEUE'
+  };
 }
 
 // ========== 建立文字生影片參數 ==========
@@ -660,57 +781,134 @@ function handleCheckStatus(data, cfg) {
     return jsonResponse({ ok: false, err: 'Missing prediction ID' });
   }
   
+  const platform = data.platform || 'replicate';
+  const falKey = data.falKey || '';
+  
   try {
-    const prediction = getPrediction(data.id, cfg.repToken);
+    let result;
     
-    let output = null;
-    let progress = 0;
-    let progressMsg = '準備中...';
-    
-    if (prediction.status === 'succeeded' && prediction.output) {
-      // output 可能是字串或陣列
-      output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-      progress = 100;
-      progressMsg = '完成！';
-    } else if (prediction.status === 'processing') {
-      // 根據 logs 估算進度
-      const logs = prediction.logs || '';
-      if (logs.includes('100%') || logs.includes('Finished')) {
-        progress = 95;
-        progressMsg = '即將完成...';
-      } else if (logs.includes('80%') || logs.includes('rendering')) {
-        progress = 80;
-        progressMsg = '渲染中...';
-      } else if (logs.includes('60%') || logs.includes('generating')) {
-        progress = 60;
-        progressMsg = '生成影格中...';
-      } else if (logs.includes('40%') || logs.includes('processing')) {
-        progress = 40;
-        progressMsg = '處理中...';
-      } else if (logs.includes('20%') || logs.includes('loading')) {
-        progress = 20;
-        progressMsg = '載入模型...';
-      } else {
-        progress = 10;
-        progressMsg = '排隊處理中...';
-      }
-    } else if (prediction.status === 'starting') {
-      progress = 5;
-      progressMsg = '啟動中...';
+    if (platform === 'fal') {
+      result = checkFalStatus(data.id, falKey);
+    } else {
+      result = checkReplicateStatus(data.id, cfg.repToken);
     }
     
-    return jsonResponse({
-      ok: true,
-      status: prediction.status,
-      output: output,
-      error: prediction.error,
-      progress: progress,
-      progressMsg: progressMsg
-    });
+    return jsonResponse(result);
     
   } catch (err) {
     return jsonResponse({ ok: false, err: err.message });
   }
+}
+
+// 檢查 fal.ai 狀態
+function checkFalStatus(requestId, falKey) {
+  const res = UrlFetchApp.fetch('https://queue.fal.run/requests/' + requestId + '/status', {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Key ' + falKey
+    },
+    muteHttpExceptions: true
+  });
+  
+  const code = res.getResponseCode();
+  const body = res.getContentText();
+  
+  if (code !== 200) {
+    throw new Error('查詢失敗: ' + code);
+  }
+  
+  const data = JSON.parse(body);
+  
+  let status = 'processing';
+  let output = null;
+  let progress = 10;
+  let progressMsg = '排隊中...';
+  
+  if (data.status === 'COMPLETED') {
+    status = 'succeeded';
+    progress = 100;
+    progressMsg = '完成！';
+    
+    // 取得結果
+    const resultRes = UrlFetchApp.fetch('https://queue.fal.run/requests/' + requestId, {
+      method: 'GET',
+      headers: { 'Authorization': 'Key ' + falKey },
+      muteHttpExceptions: true
+    });
+    
+    if (resultRes.getResponseCode() === 200) {
+      const resultData = JSON.parse(resultRes.getContentText());
+      output = resultData.video?.url || resultData.output?.url || resultData.url;
+    }
+    
+  } else if (data.status === 'FAILED') {
+    status = 'failed';
+    return { ok: true, status: 'failed', error: data.error || '生成失敗' };
+    
+  } else if (data.status === 'IN_PROGRESS') {
+    progress = 50;
+    progressMsg = '生成中...';
+    
+  } else if (data.status === 'IN_QUEUE') {
+    progress = 10;
+    progressMsg = '排隊等待...';
+  }
+  
+  return {
+    ok: true,
+    status: status,
+    output: output,
+    progress: progress,
+    progressMsg: progressMsg
+  };
+}
+
+// 檢查 Replicate 狀態
+function checkReplicateStatus(predictionId, repToken) {
+  const prediction = getPrediction(predictionId, repToken);
+  
+  let output = null;
+  let progress = 0;
+  let progressMsg = '準備中...';
+  
+  if (prediction.status === 'succeeded' && prediction.output) {
+    output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+    progress = 100;
+    progressMsg = '完成！';
+  } else if (prediction.status === 'processing') {
+    const logs = prediction.logs || '';
+    if (logs.includes('100%') || logs.includes('Finished')) {
+      progress = 95;
+      progressMsg = '即將完成...';
+    } else if (logs.includes('80%') || logs.includes('rendering')) {
+      progress = 80;
+      progressMsg = '渲染中...';
+    } else if (logs.includes('60%') || logs.includes('generating')) {
+      progress = 60;
+      progressMsg = '生成影格中...';
+    } else if (logs.includes('40%') || logs.includes('processing')) {
+      progress = 40;
+      progressMsg = '處理中...';
+    } else if (logs.includes('20%') || logs.includes('loading')) {
+      progress = 20;
+      progressMsg = '載入模型...';
+    } else {
+      progress = 10;
+      progressMsg = '排隊處理中...';
+    }
+  } else if (prediction.status === 'starting') {
+    progress = 5;
+    progressMsg = '啟動中...';
+  }
+  
+  return {
+    ok: true,
+    status: prediction.status,
+    output: output,
+    error: prediction.error,
+    progress: progress,
+    progressMsg: progressMsg
+  };
 }
 
 // ========== 推送到 LINE ==========
@@ -854,27 +1052,37 @@ function checkPendingTasks() {
   
   for (const task of pending) {
     try {
-      const prediction = getPrediction(task.id, cfg.repToken);
+      let result;
+      const platform = task.platform || 'replicate';
       
-      if (prediction.status === 'succeeded') {
+      // 根據平台檢查狀態
+      if (platform === 'fal') {
+        // 需要從某處取得 falKey，這裡假設儲存在 props 中
+        const falKey = props.getProperty('FAL_KEY') || '';
+        result = checkFalStatus(task.id, falKey);
+      } else {
+        result = checkReplicateStatus(task.id, cfg.repToken);
+      }
+      
+      if (result.status === 'succeeded') {
         // 成功！發送 LINE 通知
-        const output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
         const time = Utilities.formatDate(new Date(), 'Asia/Taipei', 'MM/dd HH:mm');
+        const platformLabel = platform === 'fal' ? 'fal.ai' : 'Replicate';
         
         const text = `🎬 AI 影片生成完成！
 
-✅ 背景生成成功
+✅ 背景生成成功 (${platformLabel})
 
 🤖 模型：${task.model}
 🕐 完成時間：${time}
 
 📥 影片連結：
-${output}`;
+${result.output}`;
 
         push(task.userId, text, cfg.lineToken);
         console.log('Sent LINE notification for task:', task.id);
         
-      } else if (prediction.status === 'failed') {
+      } else if (result.status === 'failed') {
         // 失敗
         const time = Utilities.formatDate(new Date(), 'Asia/Taipei', 'MM/dd HH:mm');
         
@@ -884,7 +1092,7 @@ ${output}`;
 
 🤖 模型：${task.model}
 🕐 時間：${time}
-📝 錯誤：${prediction.error || '未知錯誤'}`, cfg.lineToken);
+📝 錯誤：${result.error || '未知錯誤'}`, cfg.lineToken);
         
       } else {
         // 還在處理中

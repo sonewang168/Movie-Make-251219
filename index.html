@@ -414,6 +414,28 @@
             color:var(--text2);
         }
         
+        /* 平台選擇 */
+        .platform-select {
+            width:100%;
+            padding:12px;
+            background:rgba(0,0,0,0.3);
+            border:1px solid var(--border);
+            border-radius:10px;
+            color:var(--text);
+            font-size:14px;
+            cursor:pointer;
+        }
+        .platform-select:focus { outline:none; border-color:var(--primary); }
+        .platform-status {
+            margin-top:10px;
+            padding:8px 12px;
+            background:rgba(16,185,129,0.1);
+            border:1px solid rgba(16,185,129,0.3);
+            border-radius:8px;
+            font-size:11px;
+            color:#34d399;
+        }
+        
         /* 設定選項 */
         .option-row {
             display:flex;
@@ -859,6 +881,17 @@
                     </div>
                 </div>
             </div>
+            <div class="option-row" style="margin-top:12px;">
+                <div class="option-group" style="flex:1;">
+                    <div class="option-label">🔄 生成平台</div>
+                    <select id="platformSelect" class="platform-select" onchange="setPlatform(this.value)">
+                        <option value="auto">🔄 自動備援（推薦）</option>
+                        <option value="fal">🚀 fal.ai（穩定快速）</option>
+                        <option value="replicate">🔮 Replicate</option>
+                    </select>
+                </div>
+            </div>
+            <div class="platform-status" id="platformStatus">🔄 自動模式：優先 fal.ai，失敗自動切換 Replicate</div>
         </div>
 
         <!-- 背景生成選項 -->
@@ -963,6 +996,14 @@
                 <a href="https://replicate.com/account/api-tokens" target="_blank" style="color:var(--accent);">取得 Token →</a>
             </div>
         </div>
+        
+        <div class="setting-group">
+            <div class="setting-label">🚀 fal.ai API Key（備援平台）</div>
+            <input type="password" class="setting-input" id="falKey" placeholder="...">
+            <div style="font-size:11px;color:var(--text2);margin-top:6px;">
+                <a href="https://fal.ai/dashboard/keys" target="_blank" style="color:var(--accent);">取得 Key →</a> 更穩定、速度更快
+            </div>
+        </div>
 
         <div class="setting-group">
             <div class="setting-label">👤 LINE User ID</div>
@@ -1003,7 +1044,7 @@
 
     <script>
     // ========== 設定 ==========
-    const KEYS = ['gasUrl', 'repToken', 'lineUserId', 'imgbbKey', 'geminiKey', 'groqKey'];
+    const KEYS = ['gasUrl', 'repToken', 'falKey', 'lineUserId', 'imgbbKey', 'geminiKey', 'groqKey'];
     let cfg = {};
     
     // 模型設定
@@ -1021,6 +1062,7 @@
     let currentModel = 'veo3';
     let currentDuration = 5;
     let currentRatio = '16:9';
+    let currentPlatform = 'auto';
     let uploadedImage = null;
     let generatedVideoUrl = null;
     let currentPredictionId = null; // 追蹤生成 ID
@@ -1150,6 +1192,27 @@
     function setRatio(r) {
         currentRatio = r;
         document.querySelectorAll('[data-ratio]').forEach(b => b.classList.toggle('active', b.dataset.ratio === r));
+    }
+    
+    function setPlatform(p) {
+        currentPlatform = p;
+        const statusEl = document.getElementById('platformStatus');
+        if (p === 'auto') {
+            statusEl.textContent = '🔄 自動模式：優先 fal.ai，失敗自動切換 Replicate';
+            statusEl.style.background = 'rgba(16,185,129,0.1)';
+            statusEl.style.borderColor = 'rgba(16,185,129,0.3)';
+            statusEl.style.color = '#34d399';
+        } else if (p === 'fal') {
+            statusEl.textContent = '🚀 使用 fal.ai 平台（穩定快速）';
+            statusEl.style.background = 'rgba(59,130,246,0.1)';
+            statusEl.style.borderColor = 'rgba(59,130,246,0.3)';
+            statusEl.style.color = '#60a5fa';
+        } else {
+            statusEl.textContent = '🔮 使用 Replicate 平台';
+            statusEl.style.background = 'rgba(168,85,247,0.1)';
+            statusEl.style.borderColor = 'rgba(168,85,247,0.3)';
+            statusEl.style.color = '#c084fc';
+        }
     }
     
     // ========== 圖片上傳 ==========
@@ -1304,6 +1367,8 @@
                     model: currentModel,
                     duration: currentDuration,
                     ratio: currentRatio,
+                    platform: currentPlatform,
+                    falKey: cfg.falKey,
                     bgMode: bgMode,
                     lineUserId: cfg.lineUserId
                 })
@@ -1313,23 +1378,26 @@
             
             if (data.ok) {
                 currentPredictionId = data.id;
+                const usedPlatform = data.platform || 'replicate';
                 
                 // 背景模式：提示可關閉頁面
                 if (bgMode) {
                     showLoading(false);
                     showProgress(false);
-                    updateStatus('📲 背景生成中！完成後將收到 LINE 通知\n可以關閉此頁面', 'ok');
+                    const platformLabel = usedPlatform === 'fal' ? 'fal.ai' : 'Replicate';
+                    updateStatus(`📲 背景生成中 (${platformLabel})！\n完成後將收到 LINE 通知，可以關閉此頁面`, 'ok');
                     toast('📲 已啟動背景生成！');
                     
                     // 儲存到 localStorage 以便之後恢復
                     localStorage.setItem('video_pending', JSON.stringify({
                         id: data.id,
+                        platform: usedPlatform,
                         model: currentModel,
                         startTime: startTime
                     }));
                 } else {
                     // 前台模式：輪詢狀態
-                    await pollStatus(data.id, startTime);
+                    await pollStatus(data.id, startTime, usedPlatform);
                 }
             } else {
                 throw new Error(data.err || '生成失敗');
@@ -1343,7 +1411,7 @@
         }
     }
     
-    async function pollStatus(id, startTime) {
+    async function pollStatus(id, startTime, platform) {
         const maxAttempts = 120; // 最多等 10 分鐘
         let attempt = 0;
         
@@ -1356,7 +1424,9 @@
                     headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
                     body: JSON.stringify({
                         action: 'checkStatus',
-                        id: id
+                        id: id,
+                        platform: platform,
+                        falKey: cfg.falKey
                     })
                 });
                 
@@ -1367,9 +1437,10 @@
                     generatedVideoUrl = data.output;
                     const elapsed = Math.round((Date.now() - startTime) / 1000);
                     updateProgress(100, '✅ 完成！');
-                    showResult(elapsed);
-                    updateStatus('✅ 影片生成完成！', 'ok');
+                    showResult(elapsed, platform);
+                    updateStatus(`✅ 影片生成完成！(${platform === 'fal' ? 'fal.ai' : 'Replicate'})`, 'ok');
                     showProgress(false);
+                    showLoading(false);
                     toast('🎉 影片生成完成！');
                     return;
                 } else if (data.status === 'failed') {
@@ -1379,8 +1450,9 @@
                     const elapsed = Math.round((Date.now() - startTime) / 1000);
                     const progress = data.progress || Math.min(90, attempt * 1.5);
                     const msg = data.progressMsg || `處理中... ${elapsed}秒`;
+                    const platformLabel = platform === 'fal' ? '🚀 fal.ai' : '🔮 Replicate';
                     updateProgress(progress, `${msg} (${elapsed}s)`);
-                    updateLoadingText(`🎬 ${msg}\n⏱️ 已等待 ${elapsed} 秒`);
+                    updateLoadingText(`🎬 ${msg}\n${platformLabel}\n⏱️ 已等待 ${elapsed} 秒`);
                 }
                 
             } catch (e) {
@@ -1398,11 +1470,16 @@
         document.getElementById('loadingText').innerHTML = text.replace(/\n/g, '<br>');
     }
     
-    function showResult(elapsed) {
+    function showResult(elapsed, platform) {
         document.getElementById('resultCard').classList.add('show');
         document.getElementById('resultVideo').src = generatedVideoUrl;
         document.getElementById('resultModel').textContent = MODELS[currentModel].name;
         document.getElementById('resultDuration').textContent = currentDuration + ' 秒';
+        document.getElementById('resultTime').textContent = elapsed + ' 秒';
+        // 顯示使用的平台
+        const platformText = platform === 'fal' ? ' (fal.ai)' : ' (Replicate)';
+        document.getElementById('resultModel').textContent += platformText;
+    }
         document.getElementById('resultTime').textContent = elapsed + ' 秒';
     }
     
